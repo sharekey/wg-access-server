@@ -3,6 +3,7 @@ package serve
 import (
 	"context"
 	"fmt"
+	"golang.org/x/crypto/bcrypt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -29,7 +30,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
-	"golang.org/x/crypto/bcrypt"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
@@ -39,7 +39,7 @@ func Register(app *kingpin.Application) *servecmd {
 	cmd := &servecmd{}
 	cli := app.Command(cmd.Name(), "Run the server")
 	cli.Flag("config", "Path to a wg-access-server config file").Envar("WG_CONFIG").StringVar(&cmd.ConfigFilePath)
-	cli.Flag("admin-username", "Admin username (defaults to admin)").Envar("WG_ADMIN_USERNAME").Default("admin").StringVar(&cmd.AppConfig.AdminUsername)
+	cli.Flag("admin-username", "Admin username").Envar("WG_ADMIN_USERNAME").StringVar(&cmd.AppConfig.AdminUsername)
 	cli.Flag("admin-password", "Admin password (provide plaintext, stored in-memory only)").Envar("WG_ADMIN_PASSWORD").StringVar(&cmd.AppConfig.AdminPassword)
 	cli.Flag("port", "The port that the web ui server will listen on").Envar("WG_PORT").Default("8000").IntVar(&cmd.AppConfig.Port)
 	cli.Flag("external-host", "The external origin of the server (e.g. https://mydomain.com)").Envar("WG_EXTERNAL_HOST").StringVar(&cmd.AppConfig.ExternalHost)
@@ -298,23 +298,21 @@ func (cmd *servecmd) ReadConfig() *config.AppConfig {
 		logrus.Info("Metadata collection has been disabled. No metrics or device connectivity information will be recorded or shown")
 	}
 
-	if !cmd.AppConfig.Auth.IsEnabled() {
-		if cmd.AppConfig.AdminPassword == "" {
-			logrus.Fatal("missing admin password: please set via environment variable, flag or config file")
-		}
+	if !cmd.AppConfig.Auth.IsEnabled() && !cmd.AppConfig.IsAdminCredentialsProvided() {
+		logrus.Fatal("no auth config provided: missing basic admin credentials: please set via environment variables, flags or config file values")
 	}
 
-	if cmd.AppConfig.AdminPassword != "" {
-		// set a basic auth entry for the admin user
-		if cmd.AppConfig.Auth.Basic == nil {
-			// one of them has to be enabled
-			cmd.AppConfig.Auth.Basic = &authconfig.BasicAuthConfig{}
-		}
+	if !cmd.AppConfig.Auth.IsEnabled() && cmd.AppConfig.IsAdminCredentialsProvided() {
+		cmd.AppConfig.Auth.Basic = &authconfig.BasicAuthConfig{}
 		pw, err := bcrypt.GenerateFromPassword([]byte(cmd.AppConfig.AdminPassword), bcrypt.DefaultCost)
 		if err != nil {
 			logrus.Fatal(errors.Wrap(err, "failed to generate a bcrypt hash for the provided admin password"))
 		}
 		cmd.AppConfig.Auth.Basic.Users = append(cmd.AppConfig.Auth.Basic.Users, fmt.Sprintf("%s:%s", cmd.AppConfig.AdminUsername, string(pw)))
+	}
+
+	if cmd.AppConfig.Auth.IsEnabled() && cmd.AppConfig.IsAdminCredentialsProvided() {
+		logrus.Fatal("auth config provided: basic admin credentials should not be set: please unset an environment variables, flags or config file values")
 	}
 
 	// we'll generate a private key when using memory://
@@ -356,9 +354,15 @@ func claimsMiddleware(conf *config.AppConfig) authsession.ClaimsMiddleware {
 		if user == nil {
 			return errors.New("User is not logged in")
 		}
-		if user.Subject == conf.AdminUsername {
-			user.Claims.Add("admin", "true")
+
+		if user.Provider == authconfig.BasicAuthProvider {
+			if conf.AdminUsername != "" {
+				if user.Subject == conf.AdminUsername {
+					user.Claims.Add("admin", "true")
+				}
+			}
 		}
+
 		return nil
 	}
 }

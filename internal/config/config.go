@@ -115,3 +115,7 @@ type AppConfig struct {
 	// the server will not require any authentication.
 	Auth authconfig.AuthConfig `yaml:"auth"`
 }
+
+func (c *AppConfig) IsAdminCredentialsProvided() bool {
+	return c.AdminUsername != "" && c.AdminPassword != ""
+}
