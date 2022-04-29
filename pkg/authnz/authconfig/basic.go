@@ -10,6 +10,8 @@ import (
 	"github.com/tg123/go-htpasswd"
 )
 
+const BasicAuthProvider = "basic"
+
 type BasicAuthConfig struct {
 	// Users is a list of htpasswd encoded username:password pairs
 	// supports BCrypt, Sha, Ssha, Md5
@@ -34,7 +36,7 @@ func basicAuthLogin(c *BasicAuthConfig, runtime *authruntime.ProviderRuntime) ht
 			if ok := checkCreds(c.Users, u, p); ok {
 				err := runtime.SetSession(w, r, &authsession.AuthSession{
 					Identity: &authsession.Identity{
-						Provider: "basic",
+						Provider: BasicAuthProvider,
 						Subject:  u,
 						Name:     u,
 						Email:    "", // basic auth has no email
