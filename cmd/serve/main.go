@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alecthomas/kingpin/v2"
 	"github.com/docker/docker/libnetwork/resolvconf"
 	"github.com/docker/docker/libnetwork/types"
 	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
@@ -22,6 +21,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"golang.org/x/crypto/bcrypt"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
+	"github.com/alecthomas/kingpin/v2"
 	"gopkg.in/yaml.v2"
 
 	"github.com/freifunkMUC/wg-access-server/buildinfo"
@@ -39,7 +39,7 @@ func Register(app *kingpin.Application) *servecmd {
 	cmd := &servecmd{}
 	cli := app.Command(cmd.Name(), "Run the server")
 	cli.Flag("config", "Path to a wg-access-server config file").Envar("WG_CONFIG").StringVar(&cmd.ConfigFilePath)
-	cli.Flag("admin-username", "Admin username (defaults to admin)").Envar("WG_ADMIN_USERNAME").Default("admin").StringVar(&cmd.AppConfig.AdminUsername)
+	cli.Flag("admin-username", "Admin username").Envar("WG_ADMIN_USERNAME").StringVar(&cmd.AppConfig.AdminUsername)
 	cli.Flag("admin-password", "Admin password (provide plaintext, stored in-memory only)").Envar("WG_ADMIN_PASSWORD").StringVar(&cmd.AppConfig.AdminPassword)
 	cli.Flag("port", "The port that the web ui server will listen on").Envar("WG_PORT").Default("8000").IntVar(&cmd.AppConfig.Port)
 	cli.Flag("external-host", "The external origin of the server (e.g. https://mydomain.com)").Envar("WG_EXTERNAL_HOST").StringVar(&cmd.AppConfig.ExternalHost)
@@ -369,13 +369,15 @@ func (cmd *servecmd) ReadConfig() *config.AppConfig {
 		logrus.Info("Metadata collection has been disabled. No metrics or device connectivity information will be recorded or shown")
 	}
 
-	if !cmd.AppConfig.Auth.IsEnabled() {
-		if cmd.AppConfig.AdminPassword == "" {
-			logrus.Fatal("Missing admin password: please set via environment variable, flag or config file")
-		}
+	if !cmd.AppConfig.Auth.IsEnabled() && !cmd.AppConfig.IsAdminCredentialsProvided() {
+		logrus.Fatal("no auth config provided: missing basic auth credentials: please set via environment variables, flags or config file values")
 	}
 
-	if cmd.AppConfig.AdminPassword != "" {
+	if cmd.AppConfig.Auth.IsEnabled() && cmd.AppConfig.IsAdminCredentialsProvided() {
+		logrus.Fatal("auth config provided: basic auth credentials should not be set: please unset an environment variables, flags or config file values")
+	}
+
+	if !cmd.AppConfig.Auth.IsEnabled() && cmd.AppConfig.IsAdminCredentialsProvided() {
 		// set a basic auth entry for the admin user
 		pw, err := bcrypt.GenerateFromPassword([]byte(cmd.AppConfig.AdminPassword), bcrypt.DefaultCost)
 		if err != nil {

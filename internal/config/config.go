@@ -178,3 +178,7 @@ type AppConfig struct {
 		Host string `yaml:"host"`
 	} `yaml:"https"`
 }
+
+func (c *AppConfig) IsAdminCredentialsProvided() bool {
+	return c.AdminUsername != "" && c.AdminPassword != ""
+}
