@@ -302,6 +302,10 @@ func (cmd *servecmd) ReadConfig() *config.AppConfig {
 		logrus.Fatal("no auth config provided: missing basic admin credentials: please set via environment variables, flags or config file values")
 	}
 
+	if cmd.AppConfig.Auth.IsEnabled() && cmd.AppConfig.IsAdminCredentialsProvided() {
+		logrus.Fatal("auth config provided: basic admin credentials should not be set: please unset an environment variables, flags or config file values")
+	}
+
 	if !cmd.AppConfig.Auth.IsEnabled() && cmd.AppConfig.IsAdminCredentialsProvided() {
 		cmd.AppConfig.Auth.Basic = &authconfig.BasicAuthConfig{}
 		pw, err := bcrypt.GenerateFromPassword([]byte(cmd.AppConfig.AdminPassword), bcrypt.DefaultCost)
@@ -309,10 +313,6 @@ func (cmd *servecmd) ReadConfig() *config.AppConfig {
 			logrus.Fatal(errors.Wrap(err, "failed to generate a bcrypt hash for the provided admin password"))
 		}
 		cmd.AppConfig.Auth.Basic.Users = append(cmd.AppConfig.Auth.Basic.Users, fmt.Sprintf("%s:%s", cmd.AppConfig.AdminUsername, string(pw)))
-	}
-
-	if cmd.AppConfig.Auth.IsEnabled() && cmd.AppConfig.IsAdminCredentialsProvided() {
-		logrus.Fatal("auth config provided: basic admin credentials should not be set: please unset an environment variables, flags or config file values")
 	}
 
 	// we'll generate a private key when using memory://
