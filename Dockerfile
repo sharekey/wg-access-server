@@ -27,7 +27,7 @@ RUN go build -o wg-access-server
 
 ### Server
 FROM alpine:3.15.4
-RUN apk add --no-cache iptables ip6tables wireguard-tools curl
+RUN apk add --no-cache iptables ip6tables wireguard-tools curl ca-certificates
 COPY --from=server /code/wg-access-server /usr/local/bin/wg-access-server
 COPY --from=website /code/build /website/build
 CMD ["wg-access-server", "serve"]

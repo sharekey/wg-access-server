@@ -27,7 +27,7 @@ RUN go build -o wg-access-server
 
 ### Server
 FROM golang:1.18.1-alpine
-RUN apk add --no-cache iptables ip6tables wireguard-tools curl gcc musl-dev
+RUN apk add --no-cache iptables ip6tables wireguard-tools ca-certificates curl gcc musl-dev
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
 COPY --from=server /code/wg-access-server /usr/local/bin/wg-access-server
 COPY --from=website /code/build /website/build
