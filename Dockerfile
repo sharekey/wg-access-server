@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 ### Build stage for the website frontend
 FROM --platform=$BUILDPLATFORM node:17.9.0-bullseye as website
 WORKDIR /code
@@ -26,8 +28,6 @@ RUN go build -o wg-access-server
 ### Server
 FROM alpine:3.15.4
 RUN apk add --no-cache iptables ip6tables wireguard-tools curl
-ENV WG_CONFIG="/config.yaml"
-ENV WG_STORAGE="sqlite3:///data/db.sqlite3"
 COPY --from=server /code/wg-access-server /usr/local/bin/wg-access-server
 COPY --from=website /code/build /website/build
 CMD ["wg-access-server", "serve"]

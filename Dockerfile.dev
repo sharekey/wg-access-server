@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 ### Build stage for the website frontend
 FROM node:17.9.0-bullseye as website
 WORKDIR /code
@@ -27,8 +29,6 @@ RUN go build -o wg-access-server
 FROM golang:1.18.1-alpine
 RUN apk add --no-cache iptables ip6tables wireguard-tools curl gcc musl-dev
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
-ENV WG_CONFIG="/config.yaml"
-ENV WG_STORAGE="sqlite3:///data/db.sqlite3"
 COPY --from=server /code/wg-access-server /usr/local/bin/wg-access-server
 COPY --from=website /code/build /website/build
 # ENTRYPOINT ["dlv", "--listen=:2345", "--headless=true", "--api-version=2", "--accept-multiclient", "exec", "/usr/local/bin/wg-access-server", "--", "serve"]
