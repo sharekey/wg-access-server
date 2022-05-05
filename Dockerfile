@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 ### Build stage for the website frontend
 FROM --platform=$BUILDPLATFORM node:24.4.0-bookworm AS website
 WORKDIR /code
