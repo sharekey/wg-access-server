@@ -176,7 +176,7 @@ export const AllDevices = observer(
             Server Info
           </Typography>
           <code>
-            <pre>{JSON.stringify(AppState.info, null, 2)}</pre>
+            <pre style={{whiteSpace: "pre-wrap"}}>{JSON.stringify(AppState.info, null, 2)}</pre>
           </code>
         </div>
       );
