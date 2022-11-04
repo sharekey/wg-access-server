@@ -83,7 +83,7 @@ export const AllDevices = observer(class AllDevices extends React.Component {
           Server Info
         </Typography>
         <code>
-          <pre>
+          <pre style={{whiteSpace: "pre-wrap"}}>
           {JSON.stringify(AppState.info, null, 2)}
 
           </pre>
