@@ -3,10 +3,10 @@ package serve
 import (
 	"context"
 	"fmt"
-	"golang.org/x/crypto/bcrypt"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"strings"
@@ -30,6 +30,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/crypto/bcrypt"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
@@ -45,6 +46,7 @@ func Register(app *kingpin.Application) *servecmd {
 	cli.Flag("external-host", "The external origin of the server (e.g. https://mydomain.com)").Envar("WG_EXTERNAL_HOST").StringVar(&cmd.AppConfig.ExternalHost)
 	cli.Flag("storage", "The storage backend connection string").Envar("WG_STORAGE").Default("memory://").StringVar(&cmd.AppConfig.Storage)
 	cli.Flag("disable-metadata", "Disable metadata collection (i.e. metrics)").Envar("WG_DISABLE_METADATA").Default("false").BoolVar(&cmd.AppConfig.DisableMetadata)
+	cli.Flag("filename", "The configuration filename (e.g. WireGuard-Home)").Envar("WG_FILENAME").StringVar(&cmd.AppConfig.Filename)
 	cli.Flag("wireguard-enabled", "Enable or disable the embedded wireguard server (useful for development)").Envar("WG_WIREGUARD_ENABLED").Default("true").BoolVar(&cmd.AppConfig.WireGuard.Enabled)
 	cli.Flag("wireguard-interface", "Set the wireguard interface name").Default("wg0").Envar("WG_WIREGUARD_INTERFACE").StringVar(&cmd.AppConfig.WireGuard.Interface)
 	cli.Flag("wireguard-private-key", "Wireguard private key").Envar("WG_WIREGUARD_PRIVATE_KEY").StringVar(&cmd.AppConfig.WireGuard.PrivateKey)
@@ -75,13 +77,13 @@ func (cmd *servecmd) Run() {
 	conf := cmd.ReadConfig()
 
 	// Get the server's IP addresses within the VPN
-	var vpnip, vpnipv6 *net.IPNet
+	var vpnip, vpnipv6 netip.Prefix
 	var err error
 	vpnip, vpnipv6, err = network.ServerVPNIPs(conf.VPN.CIDR, conf.VPN.CIDRv6)
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	if vpnip == nil && vpnipv6 == nil {
+	if !vpnip.IsValid() && !vpnipv6.IsValid() {
 		logrus.Fatal("need at least one of VPN.CIDR or VPN.CIDRv6 set")
 	}
 
@@ -89,20 +91,20 @@ func (cmd *servecmd) Run() {
 	// This is important because clients will send traffic
 	// to the embedded DNS proxy using the VPN IP
 	vpnipstrings := make([]string, 0, 2)
-	if vpnip != nil {
-		conf.VPN.AllowedIPs = append(conf.VPN.AllowedIPs, fmt.Sprintf("%s/32", vpnip.IP.String()))
+	if vpnip.IsValid() {
+		conf.VPN.AllowedIPs = append(conf.VPN.AllowedIPs, netip.PrefixFrom(vpnip.Addr(), 32).String())
 		vpnipstrings = append(vpnipstrings, vpnip.String())
 	}
-	if vpnipv6 != nil {
-		conf.VPN.AllowedIPs = append(conf.VPN.AllowedIPs, fmt.Sprintf("%s/128", vpnipv6.IP.String()))
+	if vpnipv6.IsValid() {
+		conf.VPN.AllowedIPs = append(conf.VPN.AllowedIPs, netip.PrefixFrom(vpnipv6.Addr(), 128).String())
 		vpnipstrings = append(vpnipstrings, vpnipv6.String())
 	}
-	vpnips := make([]net.IP, 0, 2)
-	if vpnip != nil {
-		vpnips = append(vpnips, vpnip.IP)
+	vpnips := make([]netip.Addr, 0, 2)
+	if vpnip.IsValid() {
+		vpnips = append(vpnips, vpnip.Addr())
 	}
-	if vpnipv6 != nil {
-		vpnips = append(vpnips, vpnipv6.IP)
+	if vpnipv6.IsValid() {
+		vpnips = append(vpnips, vpnipv6.Addr())
 	}
 
 	// WireGuard Server
@@ -182,9 +184,10 @@ func (cmd *servecmd) Run() {
 			ListenAddr: listenAddr,
 		})
 		if err != nil {
-			logrus.Error(errors.Wrap(err, "failed to start dns server"))
+			logrus.Error(errors.Wrap(err, "failed to create dns server"))
 			return
 		}
+		dns.ListenAndServe()
 		defer dns.Close()
 		if conf.DNS.Domain != "" {
 			// Generate initial DNS zone for registered devices
@@ -299,20 +302,30 @@ func (cmd *servecmd) ReadConfig() *config.AppConfig {
 	}
 
 	if !cmd.AppConfig.Auth.IsEnabled() && !cmd.AppConfig.IsAdminCredentialsProvided() {
-		logrus.Fatal("no auth config provided: missing basic admin credentials: please set via environment variables, flags or config file values")
+		logrus.Fatal("no auth config provided: missing basic auth credentials: please set via environment variables, flags or config file values")
 	}
 
 	if cmd.AppConfig.Auth.IsEnabled() && cmd.AppConfig.IsAdminCredentialsProvided() {
-		logrus.Fatal("auth config provided: basic admin credentials should not be set: please unset an environment variables, flags or config file values")
+		logrus.Fatal("auth config provided: basic auth credentials should not be set: please unset an environment variables, flags or config file values")
 	}
 
 	if !cmd.AppConfig.Auth.IsEnabled() && cmd.AppConfig.IsAdminCredentialsProvided() {
-		cmd.AppConfig.Auth.Basic = &authconfig.BasicAuthConfig{}
+		// set a basic auth entry for the admin user
 		pw, err := bcrypt.GenerateFromPassword([]byte(cmd.AppConfig.AdminPassword), bcrypt.DefaultCost)
 		if err != nil {
 			logrus.Fatal(errors.Wrap(err, "failed to generate a bcrypt hash for the provided admin password"))
 		}
-		cmd.AppConfig.Auth.Basic.Users = append(cmd.AppConfig.Auth.Basic.Users, fmt.Sprintf("%s:%s", cmd.AppConfig.AdminUsername, string(pw)))
+		if cmd.AppConfig.Auth.Simple == nil && cmd.AppConfig.Auth.Basic == nil {
+			// basic and simple auth are unset, enable simple auth for the admin user
+			cmd.AppConfig.Auth.Simple = &authconfig.SimpleAuthConfig{}
+			cmd.AppConfig.Auth.Simple.Users = append(cmd.AppConfig.Auth.Simple.Users, fmt.Sprintf("%s:%s", cmd.AppConfig.AdminUsername, string(pw)))
+		} else if cmd.AppConfig.Auth.Simple != nil {
+			// there already exists a simple auth section, set a simple auth entry for the admin user
+			cmd.AppConfig.Auth.Simple.Users = append(cmd.AppConfig.Auth.Simple.Users, fmt.Sprintf("%s:%s", cmd.AppConfig.AdminUsername, string(pw)))
+		} else {
+			// there already exists a basic auth section, set a basic auth entry for the admin user
+			cmd.AppConfig.Auth.Basic.Users = append(cmd.AppConfig.Auth.Basic.Users, fmt.Sprintf("%s:%s", cmd.AppConfig.AdminUsername, string(pw)))
+		}
 	}
 
 	// we'll generate a private key when using memory://
@@ -354,13 +367,9 @@ func claimsMiddleware(conf *config.AppConfig) authsession.ClaimsMiddleware {
 		if user == nil {
 			return errors.New("User is not logged in")
 		}
-
-		if user.Provider == authconfig.BasicAuthProvider {
-			if conf.AdminUsername != "" {
-				if user.Subject == conf.AdminUsername {
-					user.Claims.Add("admin", "true")
-				}
-			}
+		// restrict privilege elevation by username to basic and simple auth users only
+		if (user.Provider == authconfig.BasicAuthProvider || user.Provider == authconfig.SimpleAuthProvider) && user.Subject == conf.AdminUsername {
+			user.Claims.Add("admin", "true")
 		}
 
 		return nil
@@ -410,7 +419,7 @@ func detectDefaultInterface() string {
 	return ""
 }
 
-func generateZone(deviceManager *devices.DeviceManager, vpnips []net.IP) dnsproxy.Zone {
+func generateZone(deviceManager *devices.DeviceManager, vpnips []netip.Addr) dnsproxy.Zone {
 	devs, err := deviceManager.ListAllDevices()
 	if err != nil {
 		logrus.Error(errors.Wrap(err, "could not query devices to generate the DNS zone"))
@@ -421,13 +430,13 @@ func generateZone(deviceManager *devices.DeviceManager, vpnips []net.IP) dnsprox
 		owner := device.Owner
 		name := device.Name
 		addressStrings := network.SplitAddresses(device.Address)
-		addresses := make([]net.IP, 0, 2)
+		addresses := make([]netip.Addr, 0, 2)
 		for _, str := range addressStrings {
-			addr, _, err := net.ParseCIDR(str)
+			pref, err := netip.ParsePrefix(str)
 			if err != nil {
 				continue
 			}
-			addresses = append(addresses, addr)
+			addresses = append(addresses, pref.Addr())
 		}
 		zone[dnsproxy.ZoneKey{Owner: owner, Name: name}] = addresses
 	}

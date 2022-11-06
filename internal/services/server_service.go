@@ -50,8 +50,8 @@ func (s *ServerService) Info(ctx context.Context, req *proto.InfoReq) (*proto.In
 	dnsAddress := network.StringJoinIPs(vpnip, vpnipv6)
 
 	var hostVPNIP string
-	if vpnip != nil {
-		hostVPNIP = vpnip.IP.String()
+	if vpnip.IsValid() {
+		hostVPNIP = vpnip.Addr().String()
 	} else {
 		hostVPNIP = ""
 	}
@@ -63,10 +63,11 @@ func (s *ServerService) Info(ctx context.Context, req *proto.InfoReq) (*proto.In
 		// TODO IPv6 what is HostVpnIp used for, do we need HostVpnIpv6 as well?
 		HostVpnIp:       hostVPNIP,
 		MetadataEnabled: !s.Config.DisableMetadata,
-		IsAdmin:         user.Claims.Contains("admin"),
+		IsAdmin:         user.Claims.Has("admin", "true"),
 		AllowedIps:      allowedIPs(s.Config),
 		DnsEnabled:      s.Config.DNS.Enabled,
 		DnsAddress:      dnsAddress,
+		Filename:        s.Config.Filename,
 	}, nil
 }
 

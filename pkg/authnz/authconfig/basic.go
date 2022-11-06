@@ -7,6 +7,7 @@ import (
 
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authruntime"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authsession"
+
 	"github.com/tg123/go-htpasswd"
 )
 
@@ -22,7 +23,7 @@ type BasicAuthConfig struct {
 
 func (c *BasicAuthConfig) Provider() *authruntime.Provider {
 	return &authruntime.Provider{
-		Type: "Basic",
+		Type: BasicAuthProvider,
 		Invoke: func(w http.ResponseWriter, r *http.Request, runtime *authruntime.ProviderRuntime) {
 			basicAuthLogin(c, runtime)(w, r)
 		},

@@ -5,9 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus/ctxlogrus"
-	"github.com/pkg/errors"
-
+	"github.com/freifunkMUC/wg-access-server/internal/traces"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authconfig"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authruntime"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authsession"
@@ -16,6 +14,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
+	"github.com/pkg/errors"
 )
 
 type AuthMiddleware struct {
@@ -41,8 +40,8 @@ func New(config authconfig.AuthConfig, claimsMiddleware authsession.ClaimsMiddle
 	}
 
 	router.HandleFunc("/signin", func(w http.ResponseWriter, r *http.Request) {
-		if !config.DesiresSigninPage() && len(providers) == 1 {
-			// we only have one proider, so jump directly to that
+		if r.FormValue("signout") != "1" && !config.DesiresSigninPage() && len(providers) == 1 {
+			// we only have one provider, so jump directly to that
 			providers[0].Invoke(w, r, runtime)
 			return
 		}
@@ -98,15 +97,23 @@ func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
 		// functionality i.e. annotate the request context
 		// with the request user (identity)
 		if s, err := m.runtime.GetSession(r); err == nil {
+			if s.Identity == nil {
+				// Can happen due to an aborted or failed login at the OIDC provider
+				// Redirect the user to the signin page, so they can redo the login
+				http.Redirect(w, r, "/signin", http.StatusSeeOther)
+				return
+			}
 			if m.claimsMiddleware != nil {
 				if err := m.claimsMiddleware(s.Identity); err != nil {
-					ctxlogrus.Extract(r.Context()).Error(errors.Wrap(err, "authz middleware failure"))
-					http.Error(w, "internal server error", http.StatusInternalServerError)
+					traces.Logger(r.Context()).Error(errors.Wrap(err, "authnz middleware failure"))
+					http.Redirect(w, r, "/signin", http.StatusSeeOther)
 					return
 				}
 			}
 			next.ServeHTTP(w, r.WithContext(authsession.SetIdentityCtx(r.Context(), s)))
 		} else {
+			// GetSession() errors e.g. after the server restarted, because old session cookies are no longer trusted
+			// The RequireAuthentication() middleware will be next in line and prompt the user to log in
 			next.ServeHTTP(w, r)
 		}
 	})
