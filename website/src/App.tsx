@@ -10,13 +10,29 @@ import { YourDevices } from './pages/YourDevices';
 import { AllDevices } from './pages/admin/AllDevices';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { Loading } from './components/Loading';
+import { Error } from './components/Error';
+
+
 
 export const App = observer(class App extends React.Component {
   async componentDidMount() {
-    AppState.info = await grpc.server.info({});
+    try {
+      AppState.info = await grpc.server.info({});
+    } catch (error) {
+      AppState.loadingError = true
+      console.error('An error occurred:', error);
+    }
   }
+  
+
 
   render() {
+    if(AppState.loadingError){
+      return (
+        <Error />
+      )
+    }
+
     if (!AppState.info) {
       return (    
         <Loading />
@@ -28,7 +44,7 @@ export const App = observer(class App extends React.Component {
         mode: AppState.darkMode ? 'dark' : 'light',
       },
     });
-    
+
     return (
       <Router>
         <ThemeProvider theme={darkLightTheme}>
