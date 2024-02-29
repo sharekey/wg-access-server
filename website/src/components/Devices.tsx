@@ -6,6 +6,7 @@ import { grpc } from '../Api';
 import { autorefresh } from '../Util';
 import { DeviceListItem } from './DeviceListItem';
 import { AddDevice } from './AddDevice';
+import { Loading } from './Loading';
 
 export const Devices = observer(
   class Devices extends React.Component {
@@ -27,7 +28,7 @@ export const Devices = observer(
 
     render() {
       if (!this.devices.current) {
-        return <p>loading...</p>;
+        return <Loading />;
       }
       return (
         <Grid container spacing={3} justifyContent="center">

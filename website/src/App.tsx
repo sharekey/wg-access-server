@@ -9,6 +9,7 @@ import { AppState } from './AppState';
 import { YourDevices } from './pages/YourDevices';
 import { AllDevices } from './pages/admin/AllDevices';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { Loading } from './components/Loading';
 
 export const App = observer(class App extends React.Component {
   async componentDidMount() {
@@ -17,7 +18,9 @@ export const App = observer(class App extends React.Component {
 
   render() {
     if (!AppState.info) {
-      return <p>loading...</p>;
+      return (    
+        <Loading />
+      );
     }
 
     const darkLightTheme = createTheme({
@@ -25,7 +28,7 @@ export const App = observer(class App extends React.Component {
         mode: AppState.darkMode ? 'dark' : 'light',
       },
     });
-
+    
     return (
       <Router>
         <ThemeProvider theme={darkLightTheme}>
