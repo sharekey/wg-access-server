@@ -55,7 +55,7 @@ export const AllDevices = observer(class AllDevices extends React.Component {
 
   render() {
     if (!this.devices.current || !this.users.current) {
-      return <Loading />;
+      return <Loading message="all devices"/>;
     }
 
     const users = this.users.current;

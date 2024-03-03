@@ -35,7 +35,7 @@ export const App = observer(class App extends React.Component {
 
     if (!AppState.info) {
       return (    
-        <Loading />
+        <Loading message="Page"/>
       );
     }
 
