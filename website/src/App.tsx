@@ -27,23 +27,41 @@ export const App = observer(class App extends React.Component {
 
 
   render() {
-    if(AppState.loadingError){
-      return (
-        <Error message={ AppState.loadingError } />
-      )
-    }
-
-    if (!AppState.info) {
-      return (    
-        <Loading message="Page"/>
-      );
-    }
 
     const darkLightTheme = createTheme({
       palette: {
         mode: AppState.darkMode ? 'dark' : 'light',
       },
     });
+
+    if(AppState.loadingError){
+      return (
+        <Router>
+            <ThemeProvider theme={darkLightTheme}>
+              <CssBaseline />
+              <Navigation />
+              <Box component="div" m={2}>
+              <Error message={ AppState.loadingError } />
+              </Box>
+            </ThemeProvider>
+          </Router>
+      )
+    }
+
+    if (!AppState.info) {
+      return (
+          <Router>
+            <ThemeProvider theme={darkLightTheme}>
+              <CssBaseline />
+              <Navigation />
+              <Box component="div" m={2}>
+                <Loading message="Page" />
+              </Box>
+            </ThemeProvider>
+          </Router>
+      );
+    }
+
 
     return (
       <Router>
