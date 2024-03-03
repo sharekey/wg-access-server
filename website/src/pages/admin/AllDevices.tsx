@@ -18,6 +18,7 @@ import { Device } from '../../sdk/devices_pb';
 import { User } from '../../sdk/users_pb';
 import { lastSeen, lazy } from '../../Util';
 import numeral from "numeral";
+import { Loading } from '../../components/Loading';
 
 export const AllDevices = observer(class AllDevices extends React.Component {
   users = lazy(async () => {
@@ -54,7 +55,7 @@ export const AllDevices = observer(class AllDevices extends React.Component {
 
   render() {
     if (!this.devices.current || !this.users.current) {
-      return <p>loading...</p>;
+      return <Loading />;
     }
 
     const users = this.users.current;

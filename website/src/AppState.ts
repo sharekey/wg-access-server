@@ -3,12 +3,15 @@ import { InfoRes } from './sdk/server_pb';
 
 class GlobalAppState {
   info?: InfoRes.AsObject;
+  loadingError?: String;
   darkMode: boolean;
+
 
   constructor() {
     makeObservable(this, {
       info: observable,
-      darkMode: observable
+      darkMode: observable,
+      loadingError: observable,
     });
 
     this.darkMode = false;

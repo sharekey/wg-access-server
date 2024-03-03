@@ -9,22 +9,58 @@ import { AppState } from './AppState';
 import { YourDevices } from './pages/YourDevices';
 import { AllDevices } from './pages/admin/AllDevices';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { Loading } from './components/Loading';
+import { Error } from './components/Error';
+
+
 
 export const App = observer(class App extends React.Component {
   async componentDidMount() {
-    AppState.info = await grpc.server.info({});
+    try {
+      AppState.info = await grpc.server.info({});
+    } catch (error: any) {
+      AppState.loadingError = error.message
+      console.error('An error occurred:', error);
+    }
   }
+  
+
 
   render() {
-    if (!AppState.info) {
-      return <p>loading...</p>;
-    }
-
     const darkLightTheme = createTheme({
       palette: {
         mode: AppState.darkMode ? 'dark' : 'light',
       },
     });
+
+    if(AppState.loadingError){
+      return (
+        <Router>
+            <ThemeProvider theme={darkLightTheme}>
+              <CssBaseline />
+              <Navigation />
+              <Box component="div" m={2}>
+              <Error message={ AppState.loadingError } />
+              </Box>
+            </ThemeProvider>
+          </Router>
+      )
+    }
+
+    if (!AppState.info) {
+      return (
+          <Router>
+            <ThemeProvider theme={darkLightTheme}>
+              <CssBaseline />
+              <Navigation />
+              <Box component="div" m={2}>
+                <Loading />
+              </Box>
+            </ThemeProvider>
+          </Router>
+      );
+    }
+
 
     return (
       <Router>
