@@ -3,7 +3,7 @@ import { InfoRes } from './sdk/server_pb';
 
 class GlobalAppState {
   info?: InfoRes.AsObject;
-  loadingError: boolean;
+  loadingError?: String;
   darkMode: boolean;
 
 
@@ -15,8 +15,6 @@ class GlobalAppState {
     });
 
     this.darkMode = false;
-    this.loadingError = false;
-
   }
 
   setDarkMode(darkMode: boolean) {

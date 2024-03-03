@@ -18,8 +18,8 @@ export const App = observer(class App extends React.Component {
   async componentDidMount() {
     try {
       AppState.info = await grpc.server.info({});
-    } catch (error) {
-      AppState.loadingError = true
+    } catch (error: any) {
+      AppState.loadingError = error.message
       console.error('An error occurred:', error);
     }
   }
@@ -29,7 +29,7 @@ export const App = observer(class App extends React.Component {
   render() {
     if(AppState.loadingError){
       return (
-        <Error />
+        <Error message={ AppState.loadingError } />
       )
     }
 
