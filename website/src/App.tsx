@@ -27,7 +27,6 @@ export const App = observer(class App extends React.Component {
 
 
   render() {
-
     const darkLightTheme = createTheme({
       palette: {
         mode: AppState.darkMode ? 'dark' : 'light',
@@ -55,7 +54,7 @@ export const App = observer(class App extends React.Component {
               <CssBaseline />
               <Navigation />
               <Box component="div" m={2}>
-                <Loading message="Page" />
+                <Loading />
               </Box>
             </ThemeProvider>
           </Router>

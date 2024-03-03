@@ -28,7 +28,7 @@ export const Devices = observer(
 
     render() {
       if (!this.devices.current) {
-        return <Loading message="devices"/>;
+        return <Loading />;
       }
       return (
         <Grid container spacing={3} justifyContent="center">
