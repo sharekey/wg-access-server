@@ -7,6 +7,8 @@ import { autorefresh } from '../Util';
 import { DeviceListItem } from './DeviceListItem';
 import { AddDevice } from './AddDevice';
 import { Loading } from './Loading';
+import { AppState } from '../AppState';
+import { Error } from './Error';
 import { Card, CardContent, CardHeader, Skeleton } from '@mui/material';
 import { DeviceListItemSkeleton } from './DeviceListItemSkeleton';
 import { AddDeviceSkeleton } from './AddDeviceSkeleton';
@@ -14,7 +16,14 @@ import { AddDeviceSkeleton } from './AddDeviceSkeleton';
 export const Devices = observer(
   class Devices extends React.Component {
     devices = autorefresh(30, async () => {
-      return (await grpc.devices.listDevices({})).items;
+    try{
+       const res =  await grpc.devices.listDevices({});
+       return res.items
+      } catch (error: any){
+        console.log('An error occurred:', error)
+        AppState.loadingError = error.message
+        return null
+      }
     });
 
     constructor(props: {}) {
@@ -30,6 +39,9 @@ export const Devices = observer(
     }
 
     render() {
+      if(AppState.loadingError){
+        return <Error message={AppState.loadingError} />
+      }
       if (!this.devices.current) {
         return (
           <Grid container spacing={3} justifyContent="center">
@@ -48,7 +60,6 @@ export const Devices = observer(
           </Grid>    
         );
       }
-
       return (
         <Grid container spacing={3} justifyContent="center">
           <Grid item xs={12}>
