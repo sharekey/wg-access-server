@@ -1,11 +1,10 @@
-import {observable, makeObservable, runInAction} from 'mobx';
+import { observable, makeObservable, runInAction } from 'mobx';
 import { InfoRes } from './sdk/server_pb';
 
 class GlobalAppState {
   info?: InfoRes.AsObject;
   loadingError?: String;
   darkMode: boolean;
-
 
   constructor() {
     makeObservable(this, {
@@ -20,8 +19,7 @@ class GlobalAppState {
   setDarkMode(darkMode: boolean) {
     runInAction(() => {
       this.darkMode = darkMode;
-    })
-
+    });
   }
 }
 

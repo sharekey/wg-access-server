@@ -12,50 +12,50 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { Loading } from './components/Loading';
 import { Error } from './components/Error';
 
-
-
-export const App = observer(class App extends React.Component {
-  async componentDidMount() {
-    try {
-      AppState.info = await grpc.server.info({});
-    } catch (error: any) {
-      AppState.loadingError = error.message
-      console.error('An error occurred:', error);
+export const App = observer(
+  class App extends React.Component {
+    async componentDidMount() {
+      try {
+        AppState.info = await grpc.server.info({});
+      } catch (error: any) {
+        AppState.loadingError = error.message;
+        console.error('An error occurred:', error);
+      }
     }
-  }
-  
-  pageContent(){  
-    if(AppState.loadingError){
-      return <Error message={AppState.loadingError} />
-    }else if(!AppState.info){
-      return <Loading />
-    }else{
-      return ( 
-        <Routes>
-          <Route path="/" element={<YourDevices />} />
-          {AppState.info.isAdmin && <Route path="/admin/all-devices" element={<AllDevices />} />}
-        </Routes>
+
+    pageContent() {
+      if (AppState.loadingError) {
+        return <Error message={AppState.loadingError} />;
+      } else if (!AppState.info) {
+        return <Loading />;
+      } else {
+        return (
+          <Routes>
+            <Route path="/" element={<YourDevices />} />
+            {AppState.info.isAdmin && <Route path="/admin/all-devices" element={<AllDevices />} />}
+          </Routes>
+        );
+      }
+    }
+
+    render() {
+      const darkLightTheme = createTheme({
+        palette: {
+          mode: AppState.darkMode ? 'dark' : 'light',
+        },
+      });
+
+      return (
+        <Router>
+          <ThemeProvider theme={darkLightTheme}>
+            <CssBaseline />
+            <Navigation />
+            <Box component="div" m={2}>
+              {this.pageContent()}
+            </Box>
+          </ThemeProvider>
+        </Router>
       );
     }
-  }
-
-  render() {
-    const darkLightTheme = createTheme({
-      palette: {
-        mode: AppState.darkMode ? 'dark' : 'light',
-      },
-    });
-
-    return (
-      <Router>
-        <ThemeProvider theme={darkLightTheme}>
-          <CssBaseline />
-          <Navigation />
-          <Box component="div" m={2}>
-            { this.pageContent() }
-          </Box>
-        </ThemeProvider>
-      </Router>
-    );
-  }
-});
+  },
+);

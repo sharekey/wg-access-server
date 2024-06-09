@@ -83,8 +83,8 @@ export function setClipboard(text: string) {
 }
 
 export interface DownloadOpts {
-  filename: string,
-  content: string,
+  filename: string;
+  content: string;
 }
 
 export function download(opts: DownloadOpts) {
