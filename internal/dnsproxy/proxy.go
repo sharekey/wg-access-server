@@ -1,6 +1,7 @@
 package dnsproxy
 
 import (
+	"fmt"
 	"net"
 	"runtime/debug"
 	"time"
