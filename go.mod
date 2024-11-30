@@ -9,8 +9,8 @@ require (
 	github.com/coreos/go-iptables v0.8.0
 	github.com/coreos/go-oidc/v3 v3.11.0
 	github.com/docker/docker v27.3.1+incompatible
-	github.com/freifunkMUC/pg-events v0.4.5
-	github.com/freifunkMUC/wg-embed v0.10.4
+	github.com/freifunkMUC/pg-events v0.4.4
+	github.com/freifunkMUC/wg-embed v0.10.3
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/sessions v1.4.0
