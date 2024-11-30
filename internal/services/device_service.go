@@ -28,7 +28,7 @@ func (d *DeviceService) AddDevice(ctx context.Context, req *proto.AddDeviceReq) 
 	device, err := d.DeviceManager.AddDevice(user, req.GetName(), req.GetPublicKey(), req.GetPresharedKey())
 	if err != nil {
 		ctxlogrus.Extract(ctx).Error(err)
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
 
 	return mapDevice(device), nil
@@ -68,7 +68,7 @@ func (d *DeviceService) DeleteDevice(ctx context.Context, req *proto.DeleteDevic
 
 	if err := d.DeviceManager.DeleteDevice(deviceOwner, req.GetName()); err != nil {
 		ctxlogrus.Extract(ctx).Error(err)
-		return nil, status.Errorf(codes.Internal, "failed to delete device")
+		return nil, status.Errorf(codes.Internal, "failed to delete device: %v", err)
 	}
 
 	return &emptypb.Empty{}, nil
@@ -87,7 +87,7 @@ func (d *DeviceService) ListAllDevices(ctx context.Context, req *proto.ListAllDe
 	devices, err := d.DeviceManager.ListAllDevices()
 	if err != nil {
 		ctxlogrus.Extract(ctx).Error(err)
-		return nil, status.Errorf(codes.Internal, "Failed to retrieve devices")
+		return nil, status.Errorf(codes.Internal, "failed to retrieve devices: %v", err)
 	}
 
 	return &proto.ListAllDevicesRes{
