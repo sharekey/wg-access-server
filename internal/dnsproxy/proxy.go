@@ -80,14 +80,14 @@ func (d *DNSProxy) Lookup(m *dns.Msg) (*dns.Msg, error) {
 		target := net.JoinHostPort(upstream, "53")
 		resp, _, err := d.udpClient.Exchange(m, target)
 		if err != nil && firstErr == nil {
-			logrus.Warnf(errors.Wrap(err, fmt.Sprintf("DNS lookup failed for upstream %s", upstream)).Error())
+			logrus.Warnf("DNS lookup failed for upstream %s: %v", upstream, err)
 			firstErr = err
 		} else if err == nil {
 			// Retry truncated responses over TCP
 			if resp.Truncated {
 				resp, _, err = d.tcpClient.Exchange(m, target)
 				if err != nil && firstErr == nil {
-					logrus.Warnf(errors.Wrap(err, fmt.Sprintf("DNS lookup failed over TCP for upstream %s", upstream)).Error())
+					logrus.Warnf("DNS lookup failed over TCP for upstream %s: %v", upstream, err)
 					firstErr = err
 					continue
 				}

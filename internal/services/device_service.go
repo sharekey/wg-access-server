@@ -28,7 +28,7 @@ func (d *DeviceService) AddDevice(ctx context.Context, req *proto.AddDeviceReq) 
 	device, err := d.DeviceManager.AddDevice(user, req.GetName(), req.GetPublicKey(), req.GetPresharedKey())
 	if err != nil {
 		ctxlogrus.Extract(ctx).Error(err)
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, "failed to process device: %v", err)
 	}
 
 	return mapDevice(device), nil
