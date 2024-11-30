@@ -7,7 +7,6 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/patrickmn/go-cache"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
