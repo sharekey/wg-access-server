@@ -95,7 +95,7 @@ func (d *DNSProxy) Lookup(m *dns.Msg) (*dns.Msg, error) {
 		}
 	}
 	if response == nil {
-		return nil, firstErr
+		return nil, fmt.Errorf("no response from upstream servers")
 	}
 
 	if len(response.Answer) > 0 {
