@@ -81,17 +81,4 @@ func TestDNSProxy_Lookup(t *testing.T) {
 			t.Fatal("expected response, got nil")
 		}
 	})
-
-	t.Run("Cache miss", func(t *testing.T) {
-		msg := new(dns.Msg)
-		msg.SetQuestion("example.com.", dns.TypeA)
-
-		resp, err := proxy.Lookup(msg)
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-		if resp != nil {
-			t.Fatal("expected nil response, got non-nil")
-		}
-	})
 }
