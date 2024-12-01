@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import makeStyles from '@mui/styles/makeStyles';
+import styled from '@emotion/styled';
 import { getCookie } from '../Cookies';
 import { AppState } from '../AppState';
 import { NavLink } from 'react-router-dom';
@@ -17,19 +17,18 @@ import LoginIcon from '@mui/icons-material/Login';
 import DevicesIcon from '@mui/icons-material/Devices';
 import { useMediaQuery } from '@mui/material';
 
-const useStyles = makeStyles((theme) => ({
-  title: {
-    flexGrow: 1,
-  },
-}));
+// Stile mit `styled` definieren
+const Title = styled(Typography)`
+  flex-grow: 1;
+`;
 
 export default function Navigation() {
-  const classes = useStyles();
   const hasAuthCookie = !!getCookie('auth-session');
+
   return (
     <AppBar position="static">
       <Toolbar>
-        <Typography variant="h6" className={classes.title}>
+        <Title variant="h6">
           <Link to="/" color="inherit" component={NavLink}>
             <VpnKey /> wg-access-server
           </Link>
@@ -45,7 +44,7 @@ export default function Navigation() {
               }}
             />
           )}
-        </Typography>
+        </Title>
 
         <DarkModeToggle />
 

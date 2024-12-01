@@ -13,7 +13,6 @@
     "@mui/icons-material": "^6.1.9",
     "@mui/lab": "^6.0.0-beta.17",
     "@mui/material": "^6.1.9",
-    "@mui/styles": "^6.1.9",
     "common-tags": "^1.8.2",
     "date-fns": "^4.1.0",
     "google-protobuf": "^4.0.0-rc.2",
