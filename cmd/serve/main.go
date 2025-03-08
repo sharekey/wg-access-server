@@ -188,7 +188,7 @@ func (cmd *servecmd) Run() {
 
 	// DNS Server
 	if conf.DNS.Enabled {
-		if conf.DNS.Upstream == nil || len(conf.DNS.Upstream) <= 0 {
+		if len(conf.DNS.Upstream) == 0 {
 			conf.DNS.Upstream = detectDNSUpstream(conf.VPN.CIDR != "", conf.VPN.CIDRv6 != "")
 		}
 		listenAddr := make([]string, 0, 2)
