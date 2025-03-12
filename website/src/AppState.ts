@@ -15,7 +15,7 @@ class GlobalAppState {
 
     const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const storedDarkMode = localStorage.getItem('customDarkMode');
-    
+
     this.darkMode = storedDarkMode !== null ? JSON.parse(storedDarkMode) : prefersDarkMode;
   }
 
