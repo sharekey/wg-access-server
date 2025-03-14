@@ -104,11 +104,20 @@ https://github.com/freifunkMUC/wg-access-server-chart.
 
 ![Devices](https://github.com/freifunkMUC/wg-access-server/raw/master/screenshots/devices.png)
 
-![Connect iOS](https://github.com/freifunkMUC/wg-access-server/raw/master/screenshots/connect-mobile.png)
+![Devices Darkmode](https://github.com/freifunkMUC/wg-access-server/raw/master/screenshots/devices-dark.png)
 
-![Connect MacOS](https://github.com/freifunkMUC/wg-access-server/raw/master/screenshots/connect-desktop.png)
+![Connect Mobile](https://github.com/freifunkMUC/wg-access-server/raw/master/screenshots/connect-mobile.png)
+
+![Connect Mobile Darkmode](https://github.com/freifunkMUC/wg-access-server/raw/master/screenshots/connect-mobile-dark.png)
+
+![Connect Desktop](https://github.com/freifunkMUC/wg-access-server/raw/master/screenshots/connect-desktop.png)
+
+![Connect Desktop Darkmode](https://github.com/freifunkMUC/wg-access-server/raw/master/screenshots/connect-desktop-dark.png)
 
 ![Sign In](https://github.com/freifunkMUC/wg-access-server/raw/master/screenshots/signin.png)
+
+![Sign In Darkmode](https://github.com/freifunkMUC/wg-access-server/raw/master/screenshots/signin-dark.png)
+
 
 ## Changelog
 
