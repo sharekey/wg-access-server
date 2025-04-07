@@ -58,6 +58,10 @@ Here's what you can configure:
 | `WG_CLIENTCONFIG_DNS_SERVERS`        | `--clientconfig-dns-servers`        | `clientConfig.dnsServers`      |          |                                              | DNS servers (one or more IP addresses) to write into the client configuration file. Are used instead of the servers DNS settings, if set.                                                                                                                                     |
 | `WG_CLIENTCONFIG_DNS_SEARCH_DOMAIN`  | `--clientconfig-dns-search-domain`  | `clientConfig.dnsSearchDomain` |          |                                              | DNS search domain to write into the client configuration file.                                                                                                                                                                                                                |
 | `WG_CLIENTCONFIG_MTU`                | `--clientconfig-mtu`                | `clientConfig.mtu`             |          |                                              | The maximum transmission unit (MTU) to write into the client configuration file. If left empty, a sensible default is used.                                                                                                                                                   |
+| `WG_HTTPS_ENABLED`                   | `--https-enabled`                   | `https.enabled`                |          | `true`                                       | Enable HTTPS for the web UI.                                                                                                                                                                                                                                                  |
+| `WG_HTTPS_CERT_FILE`                 | `--https-cert-file`                 | `https.certFile`               |          |                                              | Path to the TLS certificate file. If not provided, a self-signed certificate will be generated.                                                                                                                                                                               |
+| `WG_HTTPS_KEY_FILE`                  | `--https-key-file`                  | `https.keyFile`                |          |                                              | Path to the TLS private key file. If not provided, a self-signed certificate will be generated.                                                                                                                                                                               |
+| `WG_HTTPS_PORT`                      | `--https-port`                      | `https.port`                   |          | 8443                                         | Port for HTTPS server.                                                                                                                                                                                                                                                     |
 
 
 ## The Config File (config.yaml)
@@ -67,10 +71,39 @@ Here's an example config file to get started with.
 ```yaml
 loglevel: info
 storage: sqlite3:///data/db.sqlite3
+adminPassword: "admin"
+port: 8000
+externalHost: "example.com"
 wireguard:
-  privateKey: "<some-key>"
+  enabled: true
+  interface: wg0
+  privateKey: "your-private-key"
+  port: 51820
+  mtu: 1420
+vpn:
+  allowedIPs:
+    - "0.0.0.0/0"
+    - "::/0"
+  cidr: "10.44.0.0/24"
+  cidrv6: "fd48:4c4:7aa9::/64"
+  gatewayInterface: "eth0"
+  nat44: true
+  nat66: true
+  clientIsolation: false
 dns:
+  enabled: true
   upstream:
-    - "2001:4860:4860::8888"
-    - "8.8.8.8"
+    - "1.1.1.1"
+    - "2606:4700:4700::1111"
+  domain: "vpn.home.arpa."
+clientConfig:
+  dnsServers:
+    - "10.44.0.1"
+  dnsSearchDomain: "vpn.home.arpa."
+  mtu: 1420
+https:
+  enabled: true
+  certFile: "/path/to/cert.pem"
+  keyFile: "/path/to/key.pem"
+  port: 8443
 ```
