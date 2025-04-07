@@ -71,39 +71,9 @@ Here's an example config file to get started with.
 ```yaml
 loglevel: info
 storage: sqlite3:///data/db.sqlite3
-adminPassword: "admin"
-port: 8000
-externalHost: "example.com"
 wireguard:
-  enabled: true
-  interface: wg0
-  privateKey: "your-private-key"
-  port: 51820
-  mtu: 1420
-vpn:
-  allowedIPs:
-    - "0.0.0.0/0"
-    - "::/0"
-  cidr: "10.44.0.0/24"
-  cidrv6: "fd48:4c4:7aa9::/64"
-  gatewayInterface: "eth0"
-  nat44: true
-  nat66: true
-  clientIsolation: false
+  privateKey: "<some-key>"
 dns:
-  enabled: true
   upstream:
-    - "1.1.1.1"
-    - "2606:4700:4700::1111"
-  domain: "vpn.home.arpa."
-clientConfig:
-  dnsServers:
-    - "10.44.0.1"
-  dnsSearchDomain: "vpn.home.arpa."
-  mtu: 1420
-https:
-  enabled: true
-  certFile: "/path/to/cert.pem"
-  keyFile: "/path/to/key.pem"
-  port: 8443
-```
+    - "2001:4860:4860::8888"
+    - "8.8.8.8"
