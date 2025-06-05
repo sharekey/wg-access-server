@@ -1,7 +1,7 @@
 import React from 'react';
-import { render, unmountComponentAtNode } from 'react-dom';
-import Snackbar from '@material-ui/core/Snackbar';
-import Alert from '@material-ui/lab/Alert';
+import { createRoot } from 'react-dom/client';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 
 interface Props {
   intent: 'success' | 'info' | 'warning' | 'error';
@@ -9,15 +9,17 @@ interface Props {
 }
 
 export function toast(props: Props) {
-  const root = document.createElement('div');
-  document.body.appendChild(root);
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container!);
+
 
   const onClose = () => {
-    unmountComponentAtNode(root);
-    document.body.removeChild(root);
+    root.unmount();
+    document.body.removeChild(container);
   };
 
-  render(
+  root.render(
     <Snackbar
       open={true}
       autoHideDuration={3000}
@@ -27,7 +29,6 @@ export function toast(props: Props) {
       <Alert severity={props.intent} elevation={6} variant="filled" onClose={onClose}>
         {props.text}
       </Alert>
-    </Snackbar>,
-    root,
+    </Snackbar>    
   );
 }

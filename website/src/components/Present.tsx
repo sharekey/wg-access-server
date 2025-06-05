@@ -1,39 +1,51 @@
-import Button from '@material-ui/core/Button';
-import Dialog from '@material-ui/core/Dialog';
-import DialogActions from '@material-ui/core/DialogActions';
-import DialogContent from '@material-ui/core/DialogContent';
-import DialogContentText from '@material-ui/core/DialogContentText';
-import DialogTitle from '@material-ui/core/DialogTitle';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { AppState } from '../AppState';
 import React from 'react';
-import { render, unmountComponentAtNode } from 'react-dom';
+import { createRoot } from 'react-dom/client';
 
 export function present<T>(content: (close: (result: T) => void) => React.ReactNode) {
-  const root = document.createElement('div');
-  document.body.appendChild(root);
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container!); 
+
   return new Promise<T>((resolve) => {
     const close = (result: T) => {
-      unmountComponentAtNode(root);
+      root.unmount();
       resolve(result);
     };
-    render(<>{content(close)}</>, root);
+    root.render(<>{content(close)}</>);
   });
 }
 
 export function confirm(msg: string): Promise<boolean> {
+  const darkLightTheme = createTheme({
+    palette: {
+      mode: AppState.darkMode ? 'dark' : 'light',
+    },
+  });
+
   return present<boolean>((close) => (
-    <Dialog open={true} onClose={() => close(false)}>
-      <DialogTitle>Confirm</DialogTitle>
-      <DialogContent>
-        <DialogContentText>{msg}</DialogContentText>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => close(false)} variant="contained" color="primary" autoFocus>
-          Cancel
-        </Button>
-        <Button onClick={() => close(true)} variant="outlined" color="secondary">
-          Ok
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <ThemeProvider theme={darkLightTheme}>
+      <Dialog open={true} onClose={() => close(false)}>
+        <DialogTitle>Confirm</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{msg}</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => close(false)} variant="contained" color="primary" autoFocus>
+            Cancel
+          </Button>
+          <Button onClick={() => close(true)} variant="outlined" color="secondary">
+            Ok
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </ThemeProvider>
   ));
 }

@@ -4,15 +4,16 @@ import (
 	"context"
 	"strings"
 
-	"github.com/freifunkMUC/wg-access-server/internal/config"
-	"github.com/freifunkMUC/wg-access-server/internal/network"
-	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authsession"
-	"github.com/freifunkMUC/wg-access-server/proto/proto"
-
 	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus/ctxlogrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/freifunkMUC/wg-access-server/buildinfo"
+	"github.com/freifunkMUC/wg-access-server/internal/config"
+	"github.com/freifunkMUC/wg-access-server/internal/network"
+	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authsession"
+	"github.com/freifunkMUC/wg-access-server/proto/proto"
 )
 
 type ServerService struct {
@@ -61,16 +62,27 @@ func (s *ServerService) Info(ctx context.Context, req *proto.InfoReq) (*proto.In
 		PublicKey: publicKey,
 		Port:      int32(s.Config.WireGuard.Port),
 		// TODO IPv6 what is HostVpnIp used for, do we need HostVpnIpv6 as well?
-		HostVpnIp:       hostVPNIP,
-		MetadataEnabled: !s.Config.DisableMetadata,
-		IsAdmin:         user.Claims.Has("admin", "true"),
-		AllowedIps:      allowedIPs(s.Config),
-		DnsEnabled:      s.Config.DNS.Enabled,
-		DnsAddress:      dnsAddress,
-		Filename:        s.Config.Filename,
+		HostVpnIp:                     hostVPNIP,
+		MetadataEnabled:               !s.Config.DisableMetadata,
+		InactiveDeviceDeletionEnabled: s.Config.EnableInactiveDeviceDeletion,
+		InactiveDeviceGracePeriod:     DurationToDurationpb(&s.Config.InactiveDeviceGracePeriod),
+		IsAdmin:                       user.Claims.IsAdmin(),
+		AllowedIps:                    allowedIPs(s.Config),
+		DnsEnabled:                    s.Config.DNS.Enabled,
+		DnsAddress:                    dnsAddress,
+		Filename:                      s.Config.Filename,
+		ClientConfigDnsServers:        clientConfigDnsServers(s.Config),
+		ClientConfigDnsSearchDomain:   s.Config.ClientConfig.DNSSearchDomain,
+		ClientConfigMtu:               int32(s.Config.ClientConfig.MTU),
+		BuildInfo:                     &proto.BuildInfo{Version: buildinfo.Version(), Commit: buildinfo.ShortCommitHash()},
+		Mtu:                           int32(s.Config.WireGuard.MTU),
 	}, nil
 }
 
 func allowedIPs(config *config.AppConfig) string {
 	return strings.Join(config.VPN.AllowedIPs, ", ")
+}
+
+func clientConfigDnsServers(config *config.AppConfig) string {
+	return strings.Join(config.ClientConfig.DNSServers, ", ")
 }

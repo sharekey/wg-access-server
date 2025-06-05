@@ -3,7 +3,6 @@ package serve
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/netip"
@@ -13,6 +12,19 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/docker/docker/libnetwork/resolvconf"
+	"github.com/docker/docker/libnetwork/types"
+	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
+	"github.com/gorilla/mux"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
+	"golang.org/x/crypto/bcrypt"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
+	"github.com/alecthomas/kingpin/v2"
+	"gopkg.in/yaml.v2"
+
+	"github.com/freifunkMUC/wg-access-server/buildinfo"
 	"github.com/freifunkMUC/wg-access-server/internal/config"
 	"github.com/freifunkMUC/wg-access-server/internal/devices"
 	"github.com/freifunkMUC/wg-access-server/internal/dnsproxy"
@@ -21,19 +33,6 @@ import (
 	"github.com/freifunkMUC/wg-access-server/internal/storage"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authconfig"
-	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authsession"
-
-	"github.com/docker/libnetwork/resolvconf"
-	"github.com/docker/libnetwork/types"
-	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
-	"github.com/gorilla/mux"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"github.com/vishvananda/netlink"
-	"golang.org/x/crypto/bcrypt"
-	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
-	"gopkg.in/alecthomas/kingpin.v2"
-	"gopkg.in/yaml.v2"
 )
 
 func Register(app *kingpin.Application) *servecmd {
@@ -46,11 +45,18 @@ func Register(app *kingpin.Application) *servecmd {
 	cli.Flag("external-host", "The external origin of the server (e.g. https://mydomain.com)").Envar("WG_EXTERNAL_HOST").StringVar(&cmd.AppConfig.ExternalHost)
 	cli.Flag("storage", "The storage backend connection string").Envar("WG_STORAGE").Default("memory://").StringVar(&cmd.AppConfig.Storage)
 	cli.Flag("disable-metadata", "Disable metadata collection (i.e. metrics)").Envar("WG_DISABLE_METADATA").Default("false").BoolVar(&cmd.AppConfig.DisableMetadata)
+	cli.Flag("enable-inactive-device-deletion", "Enable inactive device deletion").Envar("WG_ENABLE_INACTIVE_DEVICE_DELETION").Default("false").BoolVar(&cmd.AppConfig.EnableInactiveDeviceDeletion)
+	cli.Flag("inactive-device-grace-period", "Duration after inactive device are deleted").Envar("WG_INACTIVE_DEVICE_GRACE_PERIOD").Default((1 * config.Year).String()).DurationVar(&cmd.AppConfig.InactiveDeviceGracePeriod)
 	cli.Flag("filename", "The configuration filename (e.g. WireGuard-Home)").Envar("WG_FILENAME").StringVar(&cmd.AppConfig.Filename)
+	cli.Flag("https-enabled", "Enable HTTPS for the web UI").Envar("WG_HTTPS_ENABLED").Default("true").BoolVar(&cmd.AppConfig.HTTPS.Enabled)
+	cli.Flag("https-cert-file", "Path to the TLS certificate file").Envar("WG_HTTPS_CERT_FILE").StringVar(&cmd.AppConfig.HTTPS.CertFile)
+	cli.Flag("https-key-file", "Path to the TLS private key file").Envar("WG_HTTPS_KEY_FILE").StringVar(&cmd.AppConfig.HTTPS.KeyFile)
+	cli.Flag("https-port", "Port for HTTPS server").Envar("WG_HTTPS_PORT").Default("8443").IntVar(&cmd.AppConfig.HTTPS.Port)
 	cli.Flag("wireguard-enabled", "Enable or disable the embedded wireguard server (useful for development)").Envar("WG_WIREGUARD_ENABLED").Default("true").BoolVar(&cmd.AppConfig.WireGuard.Enabled)
 	cli.Flag("wireguard-interface", "Set the wireguard interface name").Default("wg0").Envar("WG_WIREGUARD_INTERFACE").StringVar(&cmd.AppConfig.WireGuard.Interface)
 	cli.Flag("wireguard-private-key", "Wireguard private key").Envar("WG_WIREGUARD_PRIVATE_KEY").StringVar(&cmd.AppConfig.WireGuard.PrivateKey)
 	cli.Flag("wireguard-port", "The port that the Wireguard server will listen on").Envar("WG_WIREGUARD_PORT").Default("51820").IntVar(&cmd.AppConfig.WireGuard.Port)
+	cli.Flag("wireguard-mtu", "The maximum transmission unit (MTU) to be used on the server-side interface.").Envar("WG_WIREGUARD_MTU").Default("1420").IntVar(&cmd.AppConfig.WireGuard.MTU)
 	cli.Flag("vpn-allowed-ips", "A list of networks that VPN clients will be allowed to connect to via the VPN").Envar("WG_VPN_ALLOWED_IPS").Default("0.0.0.0/0", "::/0").StringsVar(&cmd.AppConfig.VPN.AllowedIPs)
 	cli.Flag("vpn-cidr", "The network CIDR for the VPN").Envar("WG_VPN_CIDR").Default("10.44.0.0/24").StringVar(&cmd.AppConfig.VPN.CIDR)
 	cli.Flag("vpn-cidrv6", "The IPv6 network CIDR for the VPN").Envar("WG_VPN_CIDRV6").Default("fd48:4c4:7aa9::/64").StringVar(&cmd.AppConfig.VPN.CIDRv6)
@@ -58,9 +64,13 @@ func Register(app *kingpin.Application) *servecmd {
 	cli.Flag("vpn-nat44-enabled", "Enable or disable NAT of IPv6 traffic leaving through the gateway").Envar("WG_IPV4_NAT_ENABLED").Default("true").BoolVar(&cmd.AppConfig.VPN.NAT44)
 	cli.Flag("vpn-nat66-enabled", "Enable or disable NAT of IPv6 traffic leaving through the gateway").Envar("WG_IPV6_NAT_ENABLED").Default("true").BoolVar(&cmd.AppConfig.VPN.NAT66)
 	cli.Flag("vpn-client-isolation", "Block or allow traffic between client devices").Envar("WG_VPN_CLIENT_ISOLATION").Default("false").BoolVar(&cmd.AppConfig.VPN.ClientIsolation)
+	cli.Flag("vpn-disable-iptables", "Disable iptables configuration completely").Envar("WG_VPN_DISABLE_IPTABLES").Default("false").BoolVar(&cmd.AppConfig.VPN.DisableIPTables)
 	cli.Flag("dns-enabled", "Enable or disable the embedded dns proxy server (useful for development)").Envar("WG_DNS_ENABLED").Default("true").BoolVar(&cmd.AppConfig.DNS.Enabled)
 	cli.Flag("dns-upstream", "An upstream DNS server to proxy DNS traffic to. Defaults to resolvconf with Cloudflare DNS as fallback").Envar("WG_DNS_UPSTREAM").StringsVar(&cmd.AppConfig.DNS.Upstream)
 	cli.Flag("dns-domain", "A domain to serve configured device names authoritatively").Envar("WG_DNS_DOMAIN").StringVar(&cmd.AppConfig.DNS.Domain)
+	cli.Flag("clientconfig-dns-servers", "DNS servers (one or more IPs, comma separated) to write into the client configuration file").Envar("WG_CLIENTCONFIG_DNS_SERVERS").StringsVar(&cmd.AppConfig.ClientConfig.DNSServers)
+	cli.Flag("clientconfig-dns-search-domain", "DNS search domain to write into the client configuration file").Envar("WG_CLIENTCONFIG_DNS_SEARCH_DOMAIN").StringVar(&cmd.AppConfig.ClientConfig.DNSSearchDomain)
+	cli.Flag("clientconfig-mtu", "The maximum transmission unit (MTU) to write into the client configuration file").Envar("WG_CLIENTCONFIG_MTU").IntVar(&cmd.AppConfig.ClientConfig.MTU)
 	return cmd
 }
 
@@ -74,7 +84,18 @@ func (cmd *servecmd) Name() string {
 }
 
 func (cmd *servecmd) Run() {
+
+	// Swallow any panic stacktrace
+	defer func() {
+		if err := recover(); err != nil {
+			logrus.Fatal(err)
+		}
+	}()
+
 	conf := cmd.ReadConfig()
+
+	// Software banner
+	logrus.Infof("+++ wg-access-server %s (%s)", buildinfo.Version(), buildinfo.ShortCommitHash())
 
 	// Get the server's IP addresses within the VPN
 	var vpnip, vpnipv6 netip.Prefix
@@ -84,7 +105,7 @@ func (cmd *servecmd) Run() {
 		logrus.Fatal(err)
 	}
 	if !vpnip.IsValid() && !vpnipv6.IsValid() {
-		logrus.Fatal("need at least one of VPN.CIDR or VPN.CIDRv6 set")
+		logrus.Fatal("Need at least one of VPN.CIDR or VPN.CIDRv6 set")
 	}
 
 	// Allow traffic to wg-access-server's peer endpoint.
@@ -116,27 +137,28 @@ func (cmd *servecmd) Run() {
 		}
 		wgimpl, err := wgembed.NewWithOpts(wgOpts)
 		if err != nil {
-			logrus.Fatal(errors.Wrap(err, "failed to create wireguard interface"))
+			logrus.Fatal(errors.Wrap(err, "failed to create WireGuard interface"))
 		}
 		defer wgimpl.Close()
 		wg = wgimpl
 
-		logrus.Infof("starting wireguard server on :%d", conf.WireGuard.Port)
+		logrus.Infof("Starting WireGuard on :%d", conf.WireGuard.Port)
 
 		wgconfig := &wgembed.ConfigFile{
 			Interface: wgembed.IfaceConfig{
 				PrivateKey: conf.WireGuard.PrivateKey,
 				Address:    vpnipstrings,
 				ListenPort: &conf.WireGuard.Port,
+				MTU:        &conf.WireGuard.MTU,
 			},
 		}
 
 		if err := wg.LoadConfig(wgconfig); err != nil {
-			logrus.Error(errors.Wrap(err, "failed to load wireguard config"))
+			logrus.Error(errors.Wrap(err, "failed to load WireGuard config"))
 			return
 		}
 
-		logrus.Infof("wireguard VPN network is %s", network.StringJoinIPNets(vpnip, vpnipv6))
+		logrus.Infof("WireGuard VPN network is %s", network.StringJoinIPNets(vpnip, vpnipv6))
 
 		options := network.ForwardingOptions{
 			GatewayIface:    conf.VPN.GatewayInterface,
@@ -146,6 +168,7 @@ func (cmd *servecmd) Run() {
 			NAT66:           conf.VPN.NAT66,
 			ClientIsolation: conf.VPN.ClientIsolation,
 			AllowedIPs:      conf.VPN.AllowedIPs,
+			DisableIPTables: conf.VPN.DisableIPTables,
 		}
 
 		if err := network.ConfigureForwarding(options); err != nil {
@@ -171,7 +194,7 @@ func (cmd *servecmd) Run() {
 
 	// DNS Server
 	if conf.DNS.Enabled {
-		if conf.DNS.Upstream == nil || len(conf.DNS.Upstream) <= 0 {
+		if len(conf.DNS.Upstream) == 0 {
 			conf.DNS.Upstream = detectDNSUpstream(conf.VPN.CIDR != "", conf.VPN.CIDRv6 != "")
 		}
 		listenAddr := make([]string, 0, 2)
@@ -210,7 +233,7 @@ func (cmd *servecmd) Run() {
 	}
 
 	// Services
-	if err := deviceManager.StartSync(conf.DisableMetadata); err != nil {
+	if err := deviceManager.StartSync(conf.DisableMetadata, conf.EnableInactiveDeviceDeletion, conf.InactiveDeviceGracePeriod); err != nil {
 		logrus.Error(errors.Wrap(err, "failed to sync"))
 		return
 	}
@@ -220,10 +243,10 @@ func (cmd *servecmd) Run() {
 	router.Use(services.RecoveryMiddleware)
 
 	// Health check endpoint
-	router.PathPrefix("/health").Handler(services.HealthEndpoint())
+	router.PathPrefix("/health").Handler(services.HealthEndpoint(deviceManager))
 
 	// Authentication middleware
-	middleware, err := authnz.NewMiddleware(conf.Auth, claimsMiddleware(conf))
+	middleware, err := authnz.NewMiddleware(conf.Auth, authnz.ClaimsMiddleware(conf))
 	if err != nil {
 		logrus.Error(errors.Wrap(err, "failed to set up authnz middleware"))
 		return
@@ -252,39 +275,82 @@ func (cmd *servecmd) Run() {
 
 	// Listen
 	address := fmt.Sprintf(":%d", conf.Port)
-	srv := &http.Server{
+
+	// Create a new HTTP server
+	httpSrv := &http.Server{
 		Addr:    address,
 		Handler: publicRouter,
 	}
 
+	// Start HTTP server
 	go func() {
-		// Start Web server
-		logrus.Infof("web ui listening on %v", address)
-		err := srv.ListenAndServe()
+		logrus.Infof("Web UI listening on http://%v", address)
+		err := httpSrv.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errChan <- errors.Wrap(err, "unable to start http server")
 		}
 	}()
 
+	// Start HTTPS server if enabled
+	var httpsSrv *http.Server
+	if conf.HTTPS.Enabled {
+		// Determine HTTPS port
+		httpsAddress := fmt.Sprintf(":%d", conf.HTTPS.Port)
+
+		// Determine certificate paths
+		certPath := conf.HTTPS.CertFile
+		keyPath := conf.HTTPS.KeyFile
+		if certPath == "" || keyPath == "" {
+			certPath, keyPath = services.GetDefaultCertPaths()
+		}
+
+		// Load TLS certificate
+		tlsConfig, err := services.LoadTLSCert(certPath, keyPath)
+		if err != nil {
+			logrus.Error(errors.Wrap(err, "failed to load TLS certificate"))
+			return
+		}
+
+		// Create HTTPS server
+		httpsSrv = &http.Server{
+			Addr:      httpsAddress,
+			Handler:   publicRouter,
+			TLSConfig: tlsConfig,
+		}
+
+		// Start HTTPS server
+		go func() {
+			logrus.Infof("Web UI listening on https://%v", httpsAddress)
+			err := httpsSrv.ListenAndServeTLS("", "") // Cert and key are already in TLSConfig
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				errChan <- errors.Wrap(err, "unable to start https server")
+			}
+		}()
+	}
+
 	select {
 	case <-signalChan:
-		ctx := context.Background()
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		err = srv.Shutdown(ctx)
-		if err != nil {
-			logrus.Error(err)
+		// Shutdown logic
+		logrus.Info("shutting down server...")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := httpSrv.Shutdown(ctx); err != nil {
+			logrus.Error(errors.Wrap(err, "unable to shutdown http server"))
 		}
-		cancel() // always call cancel to clean up the context
-	case err = <-errChan:
+		if httpsSrv != nil {
+			if err := httpsSrv.Shutdown(ctx); err != nil {
+				logrus.Error(errors.Wrap(err, "unable to shutdown https server"))
+			}
+		}
+	case err := <-errChan:
 		logrus.Error(err)
-		return
 	}
 }
 
 // ReadConfig reads the config file from disk if specified and overrides any env vars or cmdline options
 func (cmd *servecmd) ReadConfig() *config.AppConfig {
 	if cmd.ConfigFilePath != "" {
-		if b, err := ioutil.ReadFile(cmd.ConfigFilePath); err == nil {
+		if b, err := os.ReadFile(cmd.ConfigFilePath); err == nil {
 			if err := yaml.Unmarshal(b, &cmd.AppConfig); err != nil {
 				logrus.Fatal(errors.Wrap(err, "failed to bind configuration file"))
 			}
@@ -351,29 +417,27 @@ func (cmd *servecmd) ReadConfig() *config.AppConfig {
 	if cmd.AppConfig.DNS.Domain == "0" {
 		cmd.AppConfig.DNS.Domain = ""
 	}
+
 	// kingpin only splits env vars by \n, let's split at commas as well
 	if len(cmd.AppConfig.VPN.AllowedIPs) == 1 {
-		cmd.AppConfig.VPN.AllowedIPs = strings.Split(cmd.AppConfig.VPN.AllowedIPs[0], ",")
+		cmd.AppConfig.VPN.AllowedIPs = splitByCommaAndTrim(cmd.AppConfig.VPN.AllowedIPs[0])
 	}
 	if len(cmd.AppConfig.DNS.Upstream) == 1 {
-		cmd.AppConfig.DNS.Upstream = strings.Split(cmd.AppConfig.DNS.Upstream[0], ",")
+		cmd.AppConfig.DNS.Upstream = splitByCommaAndTrim(cmd.AppConfig.DNS.Upstream[0])
+	}
+	if len(cmd.AppConfig.ClientConfig.DNSServers) == 1 {
+		cmd.AppConfig.ClientConfig.DNSServers = splitByCommaAndTrim(cmd.AppConfig.ClientConfig.DNSServers[0])
 	}
 
 	return &cmd.AppConfig
 }
 
-func claimsMiddleware(conf *config.AppConfig) authsession.ClaimsMiddleware {
-	return func(user *authsession.Identity) error {
-		if user == nil {
-			return errors.New("User is not logged in")
-		}
-		// restrict privilege elevation by username to basic and simple auth users only
-		if (user.Provider == authconfig.BasicAuthProvider || user.Provider == authconfig.SimpleAuthProvider) && user.Subject == conf.AdminUsername {
-			user.Claims.Add("admin", "true")
-		}
-
-		return nil
+func splitByCommaAndTrim(s string) []string {
+	result := strings.Split(s, ",")
+	for i, addr := range result {
+		result[i] = strings.TrimSpace(addr)
 	}
+	return result
 }
 
 func detectDNSUpstream(ipv4Enabled, ipv6Enabled bool) []string {
@@ -382,7 +446,7 @@ func detectDNSUpstream(ipv4Enabled, ipv6Enabled bool) []string {
 		upstream = resolvconf.GetNameservers(r.Content, types.IP)
 	}
 	if len(upstream) == 0 {
-		logrus.Warn("failed to get nameservers from /etc/resolv.conf defaulting to Cloudflare DNS instead")
+		logrus.Warn("Failed to get nameservers from /etc/resolv.conf defaulting to Cloudflare DNS instead")
 		// If there's no default route for IPv6, lookup fails immediately without delay and we retry using IPv4
 		if ipv6Enabled {
 			upstream = append(upstream, "2606:4700:4700::1111")
@@ -409,13 +473,13 @@ func detectDefaultInterface() string {
 				return ""
 			}
 			for _, route := range routes {
-				if route.Dst == nil {
+				if route.Dst != nil && route.Dst.IP.IsUnspecified() {
 					return link.Attrs().Name
 				}
 			}
 		}
 	}
-	logrus.Warn(errors.New("could not determine the default network interface name"))
+	logrus.Warn(errors.New("Could not determine the default network interface name"))
 	return ""
 }
 
@@ -444,7 +508,7 @@ func generateZone(deviceManager *devices.DeviceManager, vpnips []netip.Addr) dns
 	return zone
 }
 
-var missingPrivateKey = `missing wireguard private key:
+var missingPrivateKey = `Missing WireGuard private key:
 
     create a key:
 
@@ -452,7 +516,7 @@ var missingPrivateKey = `missing wireguard private key:
 
     configure via environment variable:
 
-        $ export WG_WIREGUARD_PRIVATE_KEY="<private-key>"
+        $ export WIREGUARD_PRIVATE_KEY="<private-key>"
 
     or configure via flag:
 

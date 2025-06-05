@@ -1,38 +1,62 @@
 import React from 'react';
-import CssBaseline from '@material-ui/core/CssBaseline';
-import Box from '@material-ui/core/Box';
+import CssBaseline from '@mui/material/CssBaseline';
+import Box from '@mui/material/Box';
 import Navigation from './components/Navigation';
-import { BrowserRouter as Router, Switch, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { observer } from 'mobx-react';
 import { grpc } from './Api';
 import { AppState } from './AppState';
 import { YourDevices } from './pages/YourDevices';
 import { AllDevices } from './pages/admin/AllDevices';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { Loading } from './components/Loading';
+import { Error } from './components/Error';
 
-export const App = observer(class App extends React.Component {
-  async componentDidMount() {
-    AppState.info = await grpc.server.info({});
-  }
+export const App = observer(
+  class App extends React.Component {
+    async componentDidMount() {
+      try {
+        AppState.setInfo(await grpc.server.info({}));
+      } catch (error: any) {
 
-  render() {
-    if (!AppState.info) {
-      return <p>loading...</p>;
+        AppState.setLoadingError(error.message);
+        console.error('An error occurred:', error);
+      }
     }
-    return (
-      <Router>
-        <CssBaseline />
-        <Navigation />
-        <Box component="div" m={2}>
-          <Switch>
-            <Route exact path="/" component={YourDevices} />
-            {AppState.info.isAdmin && (
-              <>
-                <Route exact path="/admin/all-devices" component={AllDevices} />
-              </>
-            )}
-          </Switch>
-        </Box>
-      </Router>
-    );
-  }
-});
+
+    pageContent() {
+      if (AppState.loadingError) {
+        return <Error message={AppState.loadingError} />;
+      } else if (!AppState.info) {
+        return <Loading />;
+      } else {
+        return (
+          <Routes>
+            <Route path="/" element={<YourDevices />} />
+            {AppState.info.isAdmin && <Route path="/admin/all-devices" element={<AllDevices />} />}
+          </Routes>
+        );
+      }
+    }
+
+    render() {
+      const darkLightTheme = createTheme({
+        palette: {
+          mode: AppState.darkMode ? 'dark' : 'light',
+        },
+      });
+
+      return (
+        <Router>
+          <ThemeProvider theme={darkLightTheme}>
+            <CssBaseline />
+            <Navigation />
+            <Box component="div" m={2}>
+              {this.pageContent()}
+            </Box>
+          </ThemeProvider>
+        </Router>
+      );
+    }
+  },
+);

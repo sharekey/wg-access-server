@@ -11,6 +11,7 @@ import (
 
 type Storage interface {
 	Watcher
+	Pingable
 	Save(device *Device) error
 	List(owner string) ([]*Device, error)
 	Get(owner string, name string) (*Device, error)
@@ -28,6 +29,10 @@ type Watcher interface {
 	EmitDelete(device *Device)
 }
 
+type Pingable interface {
+	Ping() error
+}
+
 type Callback func(device *Device)
 
 type Device struct {
@@ -37,6 +42,7 @@ type Device struct {
 	OwnerProvider string    `json:"owner_provider"`
 	Name          string    `json:"name" gorm:"type:varchar(100);unique_index:key;primary_key"`
 	PublicKey     string    `json:"public_key" gorm:"unique_index"`
+	PresharedKey  string    `json:"preshared_key" gorm:"type:varchar(100)"`
 	Address       string    `json:"address"`
 	CreatedAt     time.Time `json:"created_at" gorm:"column:created_at"`
 
@@ -61,7 +67,7 @@ func NewStorage(uri string) (Storage, error) {
 
 	switch u.Scheme {
 	case "memory":
-		logrus.Warn("storing data in memory - devices will not persist between restarts")
+		logrus.Warn("Storing data in memory - devices will not persist between restarts")
 		return NewMemoryStorage(), nil
 	case "postgresql":
 		fallthrough
@@ -70,9 +76,9 @@ func NewStorage(uri string) (Storage, error) {
 	case "mysql":
 		fallthrough
 	case "sqlite3":
-		logrus.Infof("storing data in SQL backend %s", u.Scheme)
+		logrus.Infof("Storing data in SQL backend at %s", u)
 		return NewSqlStorage(u), nil
 	}
 
-	return nil, fmt.Errorf("unknown storage backend %s", u.Scheme)
+	return nil, fmt.Errorf("unknown storage backend %s", u)
 }

@@ -5,6 +5,8 @@ package proto;
 option go_package = "github.com/freifunkMUC/wg-access-server/proto/proto";
 
 import "google/protobuf/wrappers.proto";
+import "google/protobuf/duration.proto";
+import "buildinfo.proto";
 
 service Server {
   rpc Info(InfoReq) returns (InfoRes) {}
@@ -25,4 +27,11 @@ message InfoRes {
   bool dns_enabled = 8;
   string dns_address = 9;
   string filename = 10;
+  bool inactive_device_deletion_enabled = 11;
+  google.protobuf.Duration inactive_device_grace_period = 12;
+  string client_config_dns_servers = 13;
+  string client_config_dns_search_domain = 14;
+  int32 client_config_mtu = 15;
+  proto.BuildInfo build_info = 16;
+  int32 mtu = 17;
 }

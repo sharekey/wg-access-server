@@ -1,21 +1,39 @@
 package authnz
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strconv"
 
+	"github.com/gorilla/mux"
+	"github.com/gorilla/sessions"
+	"github.com/pkg/errors"
+
+	"github.com/freifunkMUC/wg-access-server/internal/config"
 	"github.com/freifunkMUC/wg-access-server/internal/traces"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authconfig"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authruntime"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authsession"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authtemplates"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authutil"
-
-	"github.com/gorilla/mux"
-	"github.com/gorilla/sessions"
-	"github.com/pkg/errors"
 )
+
+type loginErrorCode int
+
+const (
+	NotAuthenticated loginErrorCode = 1
+	NotAuthorized    loginErrorCode = 2
+)
+
+type LoginError struct {
+	msg  string
+	code loginErrorCode
+}
+
+func (err *LoginError) Error() string {
+	return fmt.Sprintf("%d: %s", err.code, err.msg)
+}
 
 type AuthMiddleware struct {
 	config           authconfig.AuthConfig
@@ -26,7 +44,20 @@ type AuthMiddleware struct {
 
 func New(config authconfig.AuthConfig, claimsMiddleware authsession.ClaimsMiddleware) (*AuthMiddleware, error) {
 	router := mux.NewRouter()
-	store := sessions.NewCookieStore([]byte(authutil.RandomString(32)))
+	var storeSecret []byte
+	if config.SessionStore == nil || config.SessionStore.Secret == "" {
+		storeSecret = []byte(authutil.RandomString(32))
+	} else {
+		var err error
+		storeSecret, err = hex.DecodeString(config.SessionStore.Secret)
+		if err != nil {
+			return nil, err
+		}
+		if len(storeSecret) != 32 {
+			return nil, errors.New("Session store secret must be 32 bytes long")
+		}
+	}
+	store := sessions.NewCookieStore(storeSecret)
 	runtime := authruntime.NewProviderRuntime(store)
 	providers := config.Providers()
 
@@ -40,7 +71,7 @@ func New(config authconfig.AuthConfig, claimsMiddleware authsession.ClaimsMiddle
 	}
 
 	router.HandleFunc("/signin", func(w http.ResponseWriter, r *http.Request) {
-		if r.FormValue("signout") != "1" && !config.DesiresSigninPage() && len(providers) == 1 {
+		if r.FormValue("signout") != "1" && !config.DesiresSignInPage() && len(providers) == 1 {
 			// we only have one provider, so jump directly to that
 			providers[0].Invoke(w, r, runtime)
 			return
@@ -55,7 +86,7 @@ func New(config authconfig.AuthConfig, claimsMiddleware authsession.ClaimsMiddle
 		index, err := strconv.Atoi(mux.Vars(r)["index"])
 		if err != nil || index < 0 || len(providers) <= index {
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = fmt.Fprintf(w, "unknown provider")
+			_, _ = fmt.Fprintf(w, "Unknown provider")
 			return
 		}
 		provider := providers[index]
@@ -83,6 +114,32 @@ func NewMiddleware(config authconfig.AuthConfig, claimsMiddleware authsession.Cl
 	return authMiddleware.Middleware, nil
 }
 
+func ClaimsMiddleware(conf *config.AppConfig) authsession.ClaimsMiddleware {
+	return func(user *authsession.Identity) error {
+		if user == nil {
+			return &LoginError{
+				msg:  "User is not logged in",
+				code: NotAuthenticated,
+			}
+		}
+		// restrict privilege elevation by username to basic and simple auth users only
+		if (user.Provider == authconfig.BasicAuthProvider || user.Provider == authconfig.SimpleAuthProvider) && user.Subject == conf.AdminUsername {
+			user.Claims.MakeAdmin()
+		}
+		// allow access to users only when access claim is present for OIDC
+		if conf.Auth.OIDC != nil && user.Provider == conf.Auth.OIDC.Name && conf.Auth.OIDC.AccessClaim != "" {
+			if !user.Claims.Has(conf.Auth.OIDC.AccessClaim, "true") {
+				return &LoginError{
+					msg:  "User has no access",
+					code: NotAuthorized,
+				}
+			}
+		}
+
+		return nil
+	}
+}
+
 func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// check if the request is for an auth
@@ -106,6 +163,17 @@ func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
 			if m.claimsMiddleware != nil {
 				if err := m.claimsMiddleware(s.Identity); err != nil {
 					traces.Logger(r.Context()).Error(errors.Wrap(err, "authnz middleware failure"))
+					if lerr, ok := err.(*LoginError); ok {
+						switch lerr.code {
+						case NotAuthenticated:
+							http.Redirect(w, r, "/signin", http.StatusUnauthorized)
+						case NotAuthorized:
+							http.Redirect(w, r, "/signin", http.StatusForbidden)
+						default:
+							http.Redirect(w, r, "/signin", http.StatusBadRequest)
+						}
+						return
+					}
 					http.Redirect(w, r, "/signin", http.StatusSeeOther)
 					return
 				}

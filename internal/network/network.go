@@ -75,11 +75,17 @@ type ForwardingOptions struct {
 	AllowedIPs      []string
 	allowedIPv4s    []string
 	allowedIPv6s    []string
+	DisableIPTables bool
 }
 
 func ConfigureForwarding(options ForwardingOptions) error {
+	// If iptables is disabled, return early
+	if options.DisableIPTables {
+		return nil
+	}
+
 	// Networking configuration (iptables) configuration
-	// to ensure that traffic from clients of the wireguard interface
+	// to ensure that traffic from clients of the WireGuard interface
 	// is sent to the provided network interface
 	allowedIPv4s := make([]string, 0, len(options.AllowedIPs)/2)
 	allowedIPv6s := make([]string, 0, len(options.AllowedIPs)/2)
