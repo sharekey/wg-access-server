@@ -6,13 +6,13 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"github.com/alecthomas/kingpin/v2"
+
 	"github.com/freifunkMUC/wg-access-server/cmd"
 	"github.com/freifunkMUC/wg-access-server/cmd/migrate"
 	"github.com/freifunkMUC/wg-access-server/cmd/serve"
-
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -21,16 +21,16 @@ var (
 )
 
 func main() {
-	// all the subcommands for wg-access-server
+	// All the subcommands for wg-access-server
 	commands := []cmd.Command{
 		serve.Register(app),
 		migrate.Register(app),
 	}
 
-	// parse CLI arguments
+	// Parse CLI arguments
 	clicmd := kingpin.MustParse(app.Parse(os.Args[1:]))
 
-	// set global log level
+	// Set global log level
 	level, err := logrus.ParseLevel(*logLevel)
 	if err != nil {
 		logrus.Fatal(errors.Wrap(err, "invalid log level - should be one of fatal, error, warn, info, debug, trace"))

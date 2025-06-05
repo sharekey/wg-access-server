@@ -1,30 +1,33 @@
-import { ButtonGroup } from '@material-ui/core';
-import Button from '@material-ui/core/Button';
-import Grid from '@material-ui/core/Grid';
-import List from '@material-ui/core/List';
-import ListItem from '@material-ui/core/ListItem';
-import ListItemText from '@material-ui/core/ListItemText';
-import Paper from '@material-ui/core/Paper';
-import Tab from '@material-ui/core/Tab';
-import Tabs from '@material-ui/core/Tabs';
-import { GetApp } from '@material-ui/icons';
-import Laptop from '@material-ui/icons/Laptop';
-import PhoneIphone from '@material-ui/icons/PhoneIphone';
-import React from 'react';
+import { ButtonGroup } from '@mui/material';
+import Button from '@mui/material/Button';
+import Grid from '@mui/material/Grid';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemText from '@mui/material/ListItemText';
+import Paper from '@mui/material/Paper';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
+import { GetApp } from '@mui/icons-material';
+import Laptop from '@mui/icons-material/Laptop';
+import PhoneIphone from '@mui/icons-material/PhoneIphone';
+import React, { Component, PropsWithChildren } from 'react';
 import { AppState } from '../AppState';
 import { isMobile } from '../Platform';
 import { download } from '../Util';
-import { LinuxIcon, MacOSIcon, WindowsIcon } from './Icons';
+import { LinuxIcon } from './Icons';
+import AppleIcon from '@mui/icons-material/Apple';
+import MicrosoftIcon from '@mui/icons-material/Microsoft';
 import { QRCode } from './QRCode';
 import { TabPanel } from './TabPanel';
 
 interface Props {
   configFile: string;
+  showMobile: boolean;
 }
 
-export class GetConnected extends React.Component<Props> {
+export class GetConnected extends Component<PropsWithChildren<Props>, any> {
   state = {
-    currentTab: isMobile() ? 'mobile' : 'desktop',
+    currentTab: isMobile() && this.props.showMobile ? 'mobile' : 'desktop',
   };
 
   go = (href: string) => {
@@ -55,12 +58,12 @@ export class GetConnected extends React.Component<Props> {
             variant="fullWidth"
           >
             <Tab icon={<Laptop />} value="desktop" />
-            <Tab icon={<PhoneIphone />} value="mobile" />
+            {this.props.showMobile && <Tab icon={<PhoneIphone />} value="mobile" />}
           </Tabs>
         </Paper>
 
         <TabPanel for="desktop" value={this.state.currentTab}>
-          <Grid container direction="row" justify="space-around" alignItems="center">
+          <Grid container direction="row" justifyContent="space-around" alignItems="center">
             <List>
               <ListItem>
                 <ListItemText style={{ width: 300 }} primary="1. Install the WireGuard App" />
@@ -68,13 +71,11 @@ export class GetConnected extends React.Component<Props> {
                   <Button onClick={() => this.go('https://www.WireGuard.com/install/')}>
                     <LinuxIcon />
                   </Button>
-                  <Button
-                    onClick={() => this.go('https://www.wireguard.com/install/')}
-                  >
-                    <WindowsIcon />
+                  <Button onClick={() => this.go('https://www.wireguard.com/install/')}>
+                    <MicrosoftIcon />
                   </Button>
                   <Button onClick={() => this.go('https://www.wireguard.com/install/#macos-app-store')}>
-                    <MacOSIcon />
+                    <AppleIcon />
                   </Button>
                 </ButtonGroup>
               </ListItem>
@@ -91,26 +92,28 @@ export class GetConnected extends React.Component<Props> {
           </Grid>
         </TabPanel>
 
-        <TabPanel for="mobile" value={this.state.currentTab}>
-          <Grid container direction="row" justify="space-around" alignItems="center">
-            <Grid item>
-              <List>
-                <ListItem>
-                  <ListItemText primary="1. Install the WireGuard app" />
-                </ListItem>
-                <ListItem>
-                  <ListItemText primary="2. Add a tunnel" />
-                </ListItem>
-                <ListItem>
-                  <ListItemText primary="3. Create from QR code" />
-                </ListItem>
-              </List>
+        {this.props.showMobile && (
+          <TabPanel for="mobile" value={this.state.currentTab}>
+            <Grid container direction="row" justifyContent="space-around" alignItems="center">
+              <Grid item>
+                <List>
+                  <ListItem>
+                    <ListItemText primary="1. Install the WireGuard app" />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText primary="2. Add a tunnel" />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText primary="3. Create from QR code" />
+                  </ListItem>
+                </List>
+              </Grid>
+              <Grid item>
+                <QRCode content={this.props.configFile} />
+              </Grid>
             </Grid>
-            <Grid item>
-              <QRCode content={this.props.configFile} />
-            </Grid>
-          </Grid>
-        </TabPanel>
+          </TabPanel>
+        )}
       </React.Fragment>
     );
   }

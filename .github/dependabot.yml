@@ -12,17 +12,29 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: {interval: monthly}
-    reviewers: [freifunkMUC/salt-stack]
-    assignees: [freifunkMUC/salt-stack]
+    reviewers: [sharekey/open-source]
+    assignees: [sharekey/open-source]
 
   - package-ecosystem: docker
     directory: /
     schedule: {interval: monthly}
-    reviewers: [freifunkMUC/salt-stack]
-    assignees: [freifunkMUC/salt-stack]
+    reviewers: [sharekey/open-source]
+    assignees: [sharekey/open-source]
+
+  - package-ecosystem: docker
+    directory: /proto/
+    schedule: {interval: monthly}
+    reviewers: [sharekey/open-source]
+    assignees: [sharekey/open-source]
 
   - package-ecosystem: npm
     directory: /website
+    schedule: {interval: monthly}
+    reviewers: [sharekey/open-source]
+    assignees: [sharekey/open-source]
+
+  - package-ecosystem: pip
+    directory: /
     schedule: {interval: monthly}
     reviewers: [sharekey/open-source]
     assignees: [sharekey/open-source]

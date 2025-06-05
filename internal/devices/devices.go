@@ -3,16 +3,17 @@ package devices
 import (
 	"fmt"
 	"net/netip"
+	"regexp"
 	"sync"
 	"time"
-
-	"github.com/freifunkMUC/wg-access-server/internal/network"
-	"github.com/freifunkMUC/wg-access-server/internal/storage"
-	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authsession"
 
 	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+
+	"github.com/freifunkMUC/wg-access-server/internal/network"
+	"github.com/freifunkMUC/wg-access-server/internal/storage"
+	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authsession"
 )
 
 type DeviceManager struct {
@@ -22,23 +23,31 @@ type DeviceManager struct {
 	cidrv6  string
 }
 
+type User struct {
+	Name        string
+	DisplayName string
+}
+
+// https://lists.zx2c4.com/pipermail/wireguard/2020-December/006222.html
+var wgKeyRegex = regexp.MustCompile("^[A-Za-z0-9+/]{42}[A|E|I|M|Q|U|Y|c|g|k|o|s|w|4|8|0]=$")
+
 func New(wg wgembed.WireGuardInterface, s storage.Storage, cidr, cidrv6 string) *DeviceManager {
 	return &DeviceManager{wg, s, cidr, cidrv6}
 }
 
-func (d *DeviceManager) StartSync(disableMetadataCollection bool) error {
+func (d *DeviceManager) StartSync(disableMetadataCollection, enableInactiveDeviceDeletion bool, inactiveDeviceGracePeriod time.Duration) error {
 	// Start listening to the device add/remove events
 	d.storage.OnAdd(func(device *storage.Device) {
-		logrus.Debugf("storage event: device added: %s/%s", device.Owner, device.Name)
-		if err := d.wg.AddPeer(device.PublicKey, network.SplitAddresses(device.Address)); err != nil {
-			logrus.Error(errors.Wrap(err, "failed to add wireguard peer"))
+		logrus.Infof("Storage event: add device '%s' (public key: '%s') for user: %s %s", device.Name, device.PublicKey, device.OwnerName, device.Owner)
+		if err := d.wg.AddPeer(device.PublicKey, device.PresharedKey, network.SplitAddresses(device.Address)); err != nil {
+			logrus.Error(errors.Wrap(err, "failed to add WireGuard peer"))
 		}
 	})
 
 	d.storage.OnDelete(func(device *storage.Device) {
-		logrus.Debugf("storage event: device removed: %s/%s", device.Owner, device.Name)
+		logrus.Infof("Storage event: remove device '%s' (public key: '%s') for user: %s %s", device.Name, device.PublicKey, device.OwnerName, device.Owner)
 		if err := d.wg.RemovePeer(device.PublicKey); err != nil {
-			logrus.Error(errors.Wrap(err, "failed to remove wireguard peer"))
+			logrus.Error(errors.Wrap(err, "failed to remove WireGuard peer"))
 		}
 	})
 
@@ -55,15 +64,52 @@ func (d *DeviceManager) StartSync(disableMetadataCollection bool) error {
 
 	// start the metrics loop
 	if !disableMetadataCollection {
+		logrus.Info("Start collecting device metadata")
 		go metadataLoop(d)
+	}
+
+	// start inactive devices loop
+	if enableInactiveDeviceDeletion {
+		if disableMetadataCollection {
+			logrus.Infof("Ignoring the automatic device deletion because the metadata collection is disabled and it is based on device metadata.")
+		} else {
+			logrus.Infof("Start looking for inactive devices. Inactive device grace period is set to %s", inactiveDeviceGracePeriod.String())
+			go inactiveLoop(d, inactiveDeviceGracePeriod)
+		}
 	}
 
 	return nil
 }
 
-func (d *DeviceManager) AddDevice(identity *authsession.Identity, name string, publicKey string) (*storage.Device, error) {
+func (d *DeviceManager) AddDevice(identity *authsession.Identity, name string, publicKey string, presharedKey string) (*storage.Device, error) {
 	if name == "" {
-		return nil, errors.New("device name must not be empty")
+		return nil, errors.New("Device name must not be empty.")
+	}
+
+	nameTaken := false
+	devices, err := d.ListDevices(identity.Subject)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list devices")
+	}
+
+	for _, x := range devices {
+		if x.Name == name {
+			nameTaken = true
+			break
+		}
+	}
+
+	if nameTaken {
+		return nil, errors.New("Device name already taken.")
+	}
+
+	if !wgKeyRegex.MatchString(publicKey) {
+		return nil, errors.New("Public key has invalid format.")
+	}
+
+	// preshared key is optional
+	if len(presharedKey) != 0 && !wgKeyRegex.MatchString(presharedKey) {
+		return nil, errors.New("Pre-shared key has invalid format.")
 	}
 
 	clientAddr, err := d.nextClientAddress()
@@ -78,6 +124,7 @@ func (d *DeviceManager) AddDevice(identity *authsession.Identity, name string, p
 		OwnerProvider: identity.Provider,
 		Name:          name,
 		PublicKey:     publicKey,
+		PresharedKey:  presharedKey,
 		Address:       clientAddr,
 		CreatedAt:     time.Now(),
 	}
@@ -115,7 +162,7 @@ func (d *DeviceManager) sync() error {
 
 	// Add peers for all devices in storage
 	for _, device := range devices {
-		if err := d.wg.AddPeer(device.PublicKey, network.SplitAddresses(device.Address)); err != nil {
+		if err := d.wg.AddPeer(device.PublicKey, device.PresharedKey, network.SplitAddresses(device.Address)); err != nil {
 			logrus.Warn(errors.Wrapf(err, "failed to add device during sync: %s", device.Name))
 		}
 	}
@@ -239,6 +286,52 @@ func deviceListContains(devices []*storage.Device, publicKey string) bool {
 		}
 	}
 	return false
+}
+
+func (d *DeviceManager) ListUsers() ([]*User, error) {
+	devices, err := d.storage.List("")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to retrieve devices")
+	}
+
+	seen := map[string]bool{}
+	users := []*User{}
+	for _, dev := range devices {
+		if _, ok := seen[dev.Owner]; !ok {
+			users = append(users, &User{Name: dev.Owner, DisplayName: dev.OwnerName})
+			seen[dev.Owner] = true
+		}
+	}
+
+	return users, nil
+}
+
+func (d *DeviceManager) DeleteDevicesForUser(user string) error {
+	devices, err := d.ListDevices(user)
+	if err != nil {
+		return errors.Wrap(err, "failed to retrieve devices")
+	}
+
+	for _, dev := range devices {
+		// TODO not transactional
+		if err := d.DeleteDevice(user, dev.Name); err != nil {
+			return errors.Wrap(err, "failed to delete device")
+		}
+	}
+
+	return nil
+}
+
+func (d *DeviceManager) Ping() error {
+	if err := d.storage.Ping(); err != nil {
+		return errors.Wrap(err, "failed to ping storage")
+	}
+
+	if err := d.wg.Ping(); err != nil {
+		return errors.Wrap(err, "failed to ping WireGuard")
+	}
+
+	return nil
 }
 
 func IsConnected(lastHandshake time.Time) bool {

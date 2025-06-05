@@ -1,7 +1,14 @@
 package config
 
 import (
+	"time"
+
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authconfig"
+)
+
+const (
+	Day  time.Duration = 24 * time.Hour
+	Year               = 365 * Day
 )
 
 type AppConfig struct {
@@ -17,7 +24,7 @@ type AppConfig struct {
 	// Defaults to 8000
 	Port int `yaml:"port"`
 	// ExternalHost is the address that clients
-	// use to connect to the wireguard interface
+	// use to connect to the WireGuard interface
 	// By default, this will be empty and the web ui
 	// will use the current page's origin.
 	ExternalHost string `yaml:"externalHost"`
@@ -29,6 +36,13 @@ type AppConfig struct {
 	// DisableMetadata allows you to turn off collection of device
 	// metadata including last handshake time & rx/tx bytes
 	DisableMetadata bool `yaml:"disableMetadata"`
+	// EnableInactiveDeviceDeletion allows you to delete inactive devices
+	// automatically after a time duration defined by InactiveDeviceGracePeriod
+	EnableInactiveDeviceDeletion bool `yaml:"enableInactiveDeviceDeletion"`
+	// InactiveDeviceGracePeriod sets the duration after which inactive
+	// devices are automatically deleted
+	// Defaults to 1 year
+	InactiveDeviceGracePeriod time.Duration `yaml:"inactiveDeviceGracePeriod"`
 	// The name of the WireGuard configuration file that can
 	// be downloaded through the web UI after adding a device.
 	// Do not include the '.conf' extension
@@ -36,7 +50,7 @@ type AppConfig struct {
 	Filename string `yaml:"filename"`
 	// Configure WireGuard related settings
 	WireGuard struct {
-		// Set this to false to disable the embedded wireguard
+		// Set this to false to disable the embedded WireGuard
 		// server. This is useful for development environments
 		// on mac and windows where we don't currently support
 		// the OS's network stack.
@@ -56,6 +70,9 @@ type AppConfig struct {
 		// The WireGuard ListenPort
 		// Defaults to 51820
 		Port int `yaml:"port"`
+		// The maximum transmission unit (MTU) used on the server-side.
+		// Empty by default.
+		MTU int `yaml:"mtu"`
 	} `yaml:"wireguard"`
 	// Configure VPN related settings (networking)
 	VPN struct {
@@ -92,6 +109,9 @@ type AppConfig struct {
 		// ClientIsolation configures whether traffic between client devices will be blocked or allowed
 		// defaults to false
 		ClientIsolation bool `yaml:"clientIsolation"`
+		// DisableIPTables configures whether to disable iptables configuration completely
+		// defaults to false
+		DisableIPTables bool `yaml:"disableIPTables"`
 	} `yaml:"vpn"`
 	// Configure the embedded DNS server
 	DNS struct {
@@ -112,6 +132,23 @@ type AppConfig struct {
 		// Disabled by default.
 		Domain string `yaml:"domain"`
 	} `yaml:"dns"`
+	// Configures settings in the configuration file distributed to clients, either by download, or QR-code.
+	ClientConfig struct {
+		// DNS servers to be provided with the client configuration file.
+		// These are written into the configuration file as is.
+		// If left empty the server decides about the address; usually the wg-access-server address.
+		// If not empty, these replace the wg-access-servers DNS addresses.
+		// Empty by default.
+		DNSServers []string `yaml:"dnsServers"`
+		// Search domain to be provided with the client configuration file.
+		// Empty by default.
+		DNSSearchDomain string `yaml:"dnsSearchDomain"`
+		// The maximum transmission unit (MTU) to be written into the client configuration file.
+		// If left empty "the MTU is automatically determined from the endpoint addresses or the system default route,
+		// which is usually a sane choice." (From wg-quick 8 manual page.)
+		// Empty by default.
+		MTU int `yaml:"mtu"`
+	} `yaml:"clientConfig"`
 	// Auth configures optional authentication backends
 	// to control access to the web ui.
 	// Devices will be managed on a per-user basis if any
@@ -119,6 +156,21 @@ type AppConfig struct {
 	// If no authentication backends are configured then
 	// the server will not require any authentication.
 	Auth authconfig.AuthConfig `yaml:"auth"`
+	// HTTPS configuration
+	HTTPS struct {
+		// Enable HTTPS for the web UI
+		// Defaults to true
+		Enabled bool `yaml:"enabled"`
+		// Path to the TLS certificate file
+		// If not provided, a self-signed certificate will be generated
+		CertFile string `yaml:"certFile"`
+		// Path to the TLS private key file
+		// If not provided, a self-signed certificate will be generated
+		KeyFile string `yaml:"keyFile"`
+		// Port for HTTPS server
+		// Defaults to 8443
+		Port int `yaml:"port"`
+	} `yaml:"https"`
 }
 
 func (c *AppConfig) IsAdminCredentialsProvided() bool {

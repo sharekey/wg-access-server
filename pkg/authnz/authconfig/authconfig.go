@@ -5,18 +5,23 @@ import (
 )
 
 type AuthConfig struct {
-	OIDC   *OIDCConfig       `yaml:"oidc"`
-	Gitlab *GitlabConfig     `yaml:"gitlab"`
-	Basic  *BasicAuthConfig  `yaml:"basic"`
-	Simple *SimpleAuthConfig `yaml:"simple"`
+	SessionStore *SessionStoreConfig `yaml:"sessionStore"`
+	OIDC         *OIDCConfig         `yaml:"oidc"`
+	Gitlab       *GitlabConfig       `yaml:"gitlab"`
+	Basic        *BasicAuthConfig    `yaml:"basic"`
+	Simple       *SimpleAuthConfig   `yaml:"simple"`
+}
+
+type SessionStoreConfig struct {
+	Secret string `yaml:"secret"`
 }
 
 func (c *AuthConfig) IsEnabled() bool {
 	return c.OIDC != nil || c.Gitlab != nil || c.Basic != nil || c.Simple != nil
 }
 
-func (c *AuthConfig) DesiresSigninPage() bool {
-	// Basic auth is the only that truly needs the signin button
+func (c *AuthConfig) DesiresSignInPage() bool {
+	// Basic auth is the only that truly needs the sign-in button
 	return c.Basic != nil
 }
 
